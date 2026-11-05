@@ -21,9 +21,11 @@ pub mod narrative;
 pub mod presets;
 pub mod recap;
 pub mod release;
+pub mod retcon;
 pub mod royalty;
 pub mod stats;
 pub mod store;
+pub mod timeline;
 pub mod translate;
 
 pub use store::{Alert, EntityCard, IndexStats, ProjectStore};

@@ -55,6 +55,13 @@ fn usage() {
          \x20 skri release kanban <папка>                        Kanban глав по статусах + переходи\n\
          \x20 skri release forecast <папка> [--window 7]           прогноз вичерпання буфера (слів/день)\n\
          \x20 skri release set <папка> <док.md> <статус> [YYYY-MM-DD] [платформи,...]  статус у frontmatter\n\
+         \x20 skri retcon publish <папка> <док.md>            зафіксувати published-снапшот глави\n\
+         \x20 skri retcon diff <папка> <док.md>                diff чернетки vs останній published\n\
+         \x20 skri retcon queue <папка>                         черга retcon-ревізій пізніших глав\n\
+         \x20 skri retcon review <папка> <id>                   позначити ревізію розглянутою\n\
+         \x20 skri timeline show <папка>                        лінійка днів по главах (календар світу)\n\
+         \x20 skri timeline validate <папка>                     стрибки назад, глави без маркерів, конфлікти локацій\n\
+         \x20 skri timeline locs <папка>                         локаційний календар: хто де по главах\n\
          \x20 skri preset compose <назва> <kind:preset...>         зібрати свій пресет з ассетів"
     );
 }
@@ -81,7 +88,9 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "crosspost" => cmd_crosspost(&args[1..])?,
         "royalty" => cmd_royalty(&args[1..])?,
         "release" => cmd_release(&args[1..])?,
+        "retcon" => cmd_retcon(&args[1..])?,
         "recap" => cmd_recap(args)?,
+        "timeline" => cmd_timeline(&args[1..])?,
         _ => usage(),
     }
     Ok(())
@@ -1008,4 +1017,194 @@ fn cmd_recap(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         rep.path.display()
     );
     Ok(())
+}
+
+// --- M5: Retcon Manager (специфікація §5.4) ---
+
+fn cmd_retcon(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use skri_core::retcon;
+    match rest.first().map(String::as_str) {
+        Some("publish") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("retcon publish: вкажіть папку"));
+            let doc = rest.get(2).cloned().unwrap_or_else(|| usage_exit("retcon publish: вкажіть документ .md"));
+            let store = open_at(dir);
+            let rep = retcon::publish(&store, &doc)?;
+            println!(
+                "✔ {} → published-версія {} (sha {}, фіксовано {})",
+                rep.doc_path,
+                rep.version,
+                &rep.body_sha256[..8.min(rep.body_sha256.len())],
+                rep.published_at
+            );
+            Ok(())
+        }
+        Some("diff") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("retcon diff: вкажіть папку"));
+            let doc = rest.get(2).cloned().unwrap_or_else(|| usage_exit("retcon diff: вкажіть документ .md"));
+            let store = open_at(dir);
+            let rep = retcon::diff(&store, &doc)?;
+            println!(
+                "{}: чернетка проти published-версії {} ({} → {})",
+                rep.doc_path,
+                rep.version,
+                &rep.body_sha256[..8.min(rep.body_sha256.len())],
+                &rep.draft_sha256[..8.min(rep.draft_sha256.len())]
+            );
+            if rep.changes.is_empty() {
+                println!("✔ змін немає — чернетка збігається з published");
+                return Ok(());
+            }
+            for c in &rep.changes {
+                match c.kind {
+                    "added" => println!("  +{:>4} {}", c.draft_line.unwrap_or(0), c.text),
+                    _ => println!("  -{:>4} {}", c.published_line.unwrap_or(0), c.text),
+                }
+            }
+            println!("  разом рядків у дельті: {}", rep.changes.len());
+            Ok(())
+        }
+        Some("queue") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("retcon queue: вкажіть папку"));
+            let store = open_at(dir);
+            let rows = retcon::queue(&store)?;
+            if rows.is_empty() {
+                println!("✔ черга ревізій порожня — retcon-зобов'язань немає");
+                return Ok(());
+            }
+            println!("{:<4} {:<9} {:<22} {:<22} {}", "id", "статус", "сутність", "джерело →", "згадка");
+            for r in &rows {
+                println!(
+                    "{:<4} {:<9} {:<22} {:<22} {}",
+                    r.id,
+                    r.status,
+                    r.entity_name,
+                    r.source_doc,
+                    truncate(&r.sentence, 48)
+                );
+                println!("      ↳ {} @{}", r.affected_doc, r.affected_pos);
+            }
+            let open = rows.iter().filter(|r| r.status == "open").count();
+            println!("\nразом: {} рядків (open: {}, reviewed: {})", rows.len(), open, rows.len() - open);
+            Ok(())
+        }
+        Some("review") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("retcon review: вкажіть папку"));
+            let id: i64 = rest.get(2).and_then(|s| s.parse().ok()).unwrap_or_else(|| usage_exit("retcon review: вкажіть id рядка"));
+            let store = open_at(dir);
+            let row = retcon::review(&store, id)?;
+            println!("✔ #{} [{}] розглянуто: {} у {} @{}", row.id, row.status, row.entity_name, row.affected_doc, row.affected_pos);
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда retcon: {:?} (publish|diff|queue|review)", other);
+            exit(2);
+        }
+    }
+}
+
+fn truncate(s: &str, max_chars: usize) -> String {
+    if s.chars().count() <= max_chars {
+        s.to_string()
+    } else {
+        let cut: String = s.chars().take(max_chars).collect();
+        format!("{cut}…")
+    }
+}
+
+// --- M5: Timeline Engine (календар світу + часові маркери + локації) ---
+
+use skri_core::timeline;
+
+fn cmd_timeline(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let sub = rest.first().map(String::as_str).unwrap_or("show");
+    match sub {
+        "show" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("timeline show: вкажіть папку"));
+            let store = open_at(dir);
+            store.reindex()?;
+            let rep = timeline::rebuild(&store)?;
+            let cal = timeline::load_calendar(&store.root)?;
+            println!("Календар: {} (місяців: {}, днів у році: {})", cal.source, cal.months.len(), cal.year_length());
+            println!("Точок таймлайну: {}, глав: {}", rep.points, rep.chapters);
+            let pts = timeline::points(&store)?;
+            let mut cur = String::new();
+            for p in &pts {
+                if p.doc_path != cur {
+                    cur = p.doc_path.clone();
+                    println!("\n● {cur} (глава {})", p.ord);
+                }
+                if p.marker_text.is_empty() {
+                    println!("  ● доба {} — початок глави", p.day);
+                } else {
+                    let tod = if p.time_of_day.is_empty() { String::new() } else { format!(", {}", p.time_of_day) };
+                    println!("  ● доба {} ({}{}) — {}", p.day, cal.format_day(p.day), tod, p.marker_text);
+                }
+            }
+            Ok(())
+        }
+        "validate" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("timeline validate: вкажіть папку"));
+            let store = open_at(dir);
+            store.reindex()?;
+            let rep = timeline::validate(&store)?;
+            if rep.is_clean() {
+                println!("✔ timeline чистий: стрибків назад і конфліктів локацій немає, усі глави марковані");
+                return Ok(());
+            }
+            if !rep.backwards.is_empty() {
+                println!("⚠ стрибків назад у часі: {}", rep.backwards.len());
+                for (_, v) in &rep.backwards {
+                    println!("  ● {}", v.get("message").and_then(|m| m.as_str()).unwrap_or(""));
+                }
+            }
+            if !rep.conflicts.is_empty() {
+                println!("⚠ конфліктів локацій: {}", rep.conflicts.len());
+                for (_, v) in &rep.conflicts {
+                    println!("  ● {}", v.get("message").and_then(|m| m.as_str()).unwrap_or(""));
+                }
+            }
+            if !rep.missing.is_empty() {
+                println!("△ попереджень (глава без жодного time-маркера): {}", rep.missing.len());
+                for (doc, ord) in &rep.missing {
+                    println!("  ● {doc} (глава {ord}) — додайте [time: ...] або day_start у frontmatter");
+                }
+            }
+            println!("\nзведення: алертів {}, конфліктів {}, попереджень {} (глав: {})",
+                rep.backwards.len(), rep.conflicts.len(), rep.missing.len(), rep.chapters);
+            Ok(())
+        }
+        "locs" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("timeline locs: вкажіть папку"));
+            let store = open_at(dir);
+            store.reindex()?;
+            let rep = timeline::rebuild(&store)?;
+            let rows = timeline::locs(&store)?;
+            if rows.is_empty() {
+                println!("(локаційних маркерів [loc: ...] не знайдено; маркерів часу: {})", rep.points);
+                return Ok(());
+            }
+            let mut cur = String::new();
+            for l in &rows {
+                if l.doc_path != cur {
+                    cur = l.doc_path.clone();
+                    println!("\n● {cur} (глава {}, доба {}):", l.ord, l.day);
+                }
+                let mv = if l.moved { " [переміщення]" } else { "" };
+                println!("  {} — {}{}", l.entity, l.location, mv);
+            }
+            let conf = timeline::conflict_alerts(&store)?;
+            if !conf.is_empty() {
+                println!("\n⚠ конфліктів локацій в одну добу: {}", conf.len());
+                for (_, payload) in conf {
+                    let v: serde_json::Value = serde_json::from_str(&payload)?;
+                    println!("  ● {}", v.get("message").and_then(|m| m.as_str()).unwrap_or(""));
+                }
+            }
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда timeline: {other} (show|validate|locs)");
+            exit(2);
+        }
+    }
 }
