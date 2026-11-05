@@ -1,0 +1,18 @@
+{
+  "preset": "note-taker-uk",
+  "language": "uk",
+  "description": "Нотатник / Zettelkasten: атомарні нотатки, композитор рукопису, беклінки",
+  "entities": [
+    { "name": "концепція", "fields": ["джерело"] },
+    { "name": "джерело", "fields": ["автор", "рік"] }
+  ],
+  "structure": {
+    "нотатки": { "тема": ["нотатка"] }
+  },
+  "checklists": [
+    { "name": "оформлення нотатки", "items": ["одна думка", "лінки на джерела"] }
+  ],
+  "validators": {
+    "assertion-conflict": true
+  }
+}

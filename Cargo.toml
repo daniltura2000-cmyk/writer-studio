@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = ["crates/skri-core", "crates/skri-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["daniltura2000-cmyk"]
+
+[profile.release]
+lto = "thin"

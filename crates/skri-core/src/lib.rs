@@ -1,0 +1,64 @@
+//! Writer Studio core — «додаток, який читає рукопис».
+//!
+//! M0+M1 вертикальний слайс:
+//! - [`store`]   — Project Store: markdown-файли + SQLite (WAL), FTS5-пошук
+//! - [`indexer`] — витяг сутностей/згадок з тексту правилами (кирилиця+латиниця)
+//! - [`drift`]   — детекція дрейфу імен (Kaldrin vs Kaldryn)
+//! - [`bible`]   — живий Story Bible: картки сутностей, assertions, конфлікти
+//! - [`presets`] — композабельні пресети жанрів (JSON-маніфести)
+
+pub mod bible;
+pub mod drift;
+pub mod frontmatter;
+pub mod indexer;
+pub mod models;
+pub mod presets;
+pub mod store;
+
+pub use store::{Alert, EntityCard, IndexStats, ProjectStore};
+
+/// Тип помилки ядра.
+#[derive(Debug)]
+pub enum Error {
+    Io(std::io::Error),
+    Db(rusqlite::Error),
+    Json(serde_json::Error),
+    /// Проєкт не ініціалізований (немає `.skri/settings.json`)
+    NotAProject(std::path::PathBuf),
+    /// Інвалідний пресет/дані
+    Invalid(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Io(e) => write!(f, "I/O: {e}"),
+            Error::Db(e) => write!(f, "SQLite: {e}"),
+            Error::Json(e) => write!(f, "JSON: {e}"),
+            Error::NotAProject(p) => {
+                write!(f, "це не проєкт Writer Studio (немає .skri у {})", p.display())
+            }
+            Error::Invalid(m) => write!(f, "некоректні дані: {m}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::Io(e)
+    }
+}
+impl From<rusqlite::Error> for Error {
+    fn from(e: rusqlite::Error) -> Self {
+        Error::Db(e)
+    }
+}
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Error::Json(e)
+    }
+}
+
+pub type Result<T> = std::result::Result<T, Error>;

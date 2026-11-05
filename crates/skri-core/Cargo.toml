@@ -1,0 +1,12 @@
+[package]
+name = "skri-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Writer Studio core: project store (markdown+SQLite), index engine, story bible, name-drift, presets"
+
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+walkdir = "2"

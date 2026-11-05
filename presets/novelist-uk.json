@@ -1,0 +1,24 @@
+{
+  "preset": "novelist-uk",
+  "language": "uk",
+  "description": "Романіст / вебновел-автор: рукопис, живий story bible, name-drift, канон",
+  "entities": [
+    { "name": "персонаж", "fields": ["вік", "зовнішність", "арка", "статус"] },
+    { "name": "локація", "fields": ["регіон"] },
+    { "name": "предмет", "fields": [] },
+    { "name": "подія", "fields": ["коли"] }
+  ],
+  "structure": {
+    "твори": { "книга": { "розділ": ["сцена"] } }
+  },
+  "checklists": [
+    { "name": "перед-публікація", "items": ["consistency-scan", "name-drift", "timeline"] }
+  ],
+  "validators": {
+    "name-drift": true,
+    "assertion-conflict": true
+  },
+  "templates": {
+    "chapter-note": "# {{title}}\n\n## Мета сцени\n\n## Що змінилося в каноні\n"
+  }
+}
