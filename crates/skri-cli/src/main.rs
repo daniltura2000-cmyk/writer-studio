@@ -1,7 +1,7 @@
 //! Writer Studio CLI (`skri`): init / index / bible / drift / preset / search.
 //! Локально, безкоштовно, українською.
 
-use skri_core::{bible, drift, indexer, models, presets, scrub, ProjectStore};
+use skri_core::{bible, drift, indexer, models, presets, scrub, sync, ProjectStore};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -79,7 +79,11 @@ fn usage() {
          \x20 skri notes new <папка> <назва>                      тематична нотатка з шаблону topic-note\n\
          \x20 skri scrub build <папка> <вихід.epub> [--pen «Ім'я»] [--light] [--date YYYY-MM-DD]  EPUB зі scrub метаданих\n\
          \x20 skri scrub report <папка>                          останній scrub-звіт (що саме замінено)\n\
+         \x20 skri sync status <папка>                          векторні годинники по доках + журнал синку\n\
+         \x20 skri sync export <папка> <вихід.json>             пакет обміну (флешка/спільна папка)\n\
+         \x20 skri sync import <папка> <пакет.json>             злити пакет у локальний проєкт\n\
          \x20 skri preset compose <назва> <kind:preset...>         зібрати свій пресет з ассетів"
+
     );
 }
 
@@ -112,6 +116,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "fact" => cmd_fact(&args[1..])?,
         "notes" => cmd_notes(&args[1..])?,
         "scrub" => cmd_scrub(&args[1..])?,
+        "sync" => cmd_sync(&args[1..])?,
         _ => usage(),
     }
     Ok(())
@@ -1602,6 +1607,100 @@ fn cmd_scrub(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         other => {
             eprintln!("✖ невідома підкоманда scrub: {:?} (build|report)", other.unwrap_or(""));
+            exit(2);
+        }
+    }
+}
+
+fn cmd_sync(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    match rest.first().map(String::as_str) {
+        Some("status") | None => {
+            let dir = rest
+                .get(1)
+                .map(String::as_str)
+                .unwrap_or_else(|| usage_exit("sync status: вкажіть папку проєкту"));
+            let store = open_at(dir);
+            let st = sync::status(&store)?;
+            println!("Пристрій: {}", st.device_id);
+            println!("\nВекторні годинники ({} доків):", st.docs.len());
+            for d in &st.docs {
+                if d.clock.is_empty() {
+                    println!("  {} → ∅ (ще не зберігалося через save_doc)", d.path);
+                } else {
+                    println!("  {} → {}", d.path, d.clock);
+                }
+            }
+            println!("\nОстанні події журналу ({}):", st.log.len());
+            if st.log.is_empty() {
+                println!("  (журнал порожній — синку ще не було)");
+            }
+            for r in &st.log {
+                println!("  ● {} {} {} — {}", r.ts, r.device, r.doc_path, r.action);
+            }
+            let conf = sync::conflicts(&store)?;
+            if !conf.is_empty() {
+                println!("\n⚠ нерозв'язаних конфліктів: {}", conf.len());
+                for c in &conf {
+                    println!(
+                        "  ● {} рядок {} (локальний {}) vs рядок {} ({})",
+                        c.doc_path,
+                        c.local_line.map(|l| l.to_string()).unwrap_or("?".into()),
+                        c.local_device,
+                        c.remote_line.map(|l| l.to_string()).unwrap_or("?".into()),
+                        c.remote_device
+                    );
+                }
+                println!("  маркери <<<<<<</>>>>>>> у файлах — розв'яжіть вручну і збережіть");
+            }
+            Ok(())
+        }
+        Some("export") => {
+            let dir = rest
+                .get(1)
+                .map(String::as_str)
+                .unwrap_or_else(|| usage_exit("sync export: вкажіть папку проєкту"));
+            let out = rest
+                .get(2)
+                .map(PathBuf::from)
+                .unwrap_or_else(|| usage_exit("sync export: вкажіть вихідний .json"));
+            let store = open_at(dir);
+            let rep = sync::export_packet(&store, &out)?;
+            println!(
+                "✔ пакет {} (пристрій {}, доків: {})",
+                rep.out_path.display(),
+                rep.device,
+                rep.docs
+            );
+            for p in &rep.paths {
+                println!("  • {p}");
+            }
+            Ok(())
+        }
+        Some("import") => {
+            let dir = rest
+                .get(1)
+                .map(String::as_str)
+                .unwrap_or_else(|| usage_exit("sync import: вкажіть папку проєкту"));
+            let packet = rest
+                .get(2)
+                .map(PathBuf::from)
+                .unwrap_or_else(|| usage_exit("sync import: вкажіть пакет.json"));
+            let store = open_at(dir);
+            let rep = sync::import_packet(&store, &packet)?;
+            println!(
+                "✔ пакет від пристрою {}: fast-forward {}, автозлиттями {}, конфліктів {}, пропущено {}",
+                rep.device, rep.fast_forward, rep.merged, rep.conflicts, rep.skipped
+            );
+            for d in &rep.conflict_docs {
+                println!("  ⚠ конфлікт у {d} — маркери у файлі, алерт створено");
+            }
+            Ok(())
+        }
+        other => {
+            eprintln!(
+                "✖ невідома підкоманда sync: {:?} (status|export|import)",
+                other.unwrap_or("")
+            );
             exit(2);
         }
     }

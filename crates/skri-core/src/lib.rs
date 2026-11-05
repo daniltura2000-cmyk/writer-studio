@@ -28,6 +28,7 @@ pub mod royalty;
 pub mod scrub;
 pub mod stats;
 pub mod store;
+pub mod sync;
 pub mod timeline;
 pub mod translate;
 
