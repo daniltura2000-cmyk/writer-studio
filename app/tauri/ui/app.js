@@ -96,7 +96,10 @@ $("setupCreate").onclick = async () => {
   const p = $("setupRoot").value.trim();
   if (!p) { $("setupMsg").textContent = "Вкажіть шлях до НОВОЇ папки проєкту."; return; }
   try {
-    await cmd("init_project", { preset: $("setupPreset").value });
+    root = p; // бо cmd() підставляє root сам — до створення він ще не був виставлений
+    localStorage.setItem("skri.root", root);
+    const r = await cmdq("init_project", { preset: $("setupPreset").value });
+    if (r.err != null) { $("setupMsg").textContent = "Не вдалося створити: " + r.err; return; }
     $("setupMsg").textContent = "";
     await openProject(p);
   } catch (e) {
