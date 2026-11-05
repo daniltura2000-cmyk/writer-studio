@@ -10,10 +10,13 @@
 pub mod bible;
 pub mod drift;
 pub mod frontmatter;
+pub mod glossary;
 pub mod indexer;
+pub mod loc;
 pub mod models;
 pub mod presets;
 pub mod store;
+pub mod translate;
 
 pub use store::{Alert, EntityCard, IndexStats, ProjectStore};
 

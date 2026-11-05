@@ -60,3 +60,16 @@
 - [ ] CRDT (Automerge) поверх markdown/SQLite, офлайн-first
 - [ ] Comments/Suggestions колаб
 - [ ] Прогін acceptance-тестів §9 специфікації
+
+## M2 — Пресети повні + мультимовність (ядро ✅, UI ⬜)
+- [x] Серійний глосарій (series_wide, rule keep/translate/transliterate, міжтомний експорт)
+- [x] Глосарій-валідація перекладу („Alice→Elise" ловиться; unresolved-терміни)
+- [x] Промпт-блок глосарію для AI-перекладу (авто замість ручної вставки)
+- [x] Перекладний пайплайн: сегменти, статуси draft→mt→human→approved, side-by-side дані
+- [x] Локальна Ollama-інтеграція (raw TCP, std-only) + dry-run без моделі
+- [x] Локалізаційні ліміти per-language (de ×1.30, uk ×1.15, CJK ×0.60) — алерт ДО публікації
+- [x] T-V реєстр (ти/ви) — mixed-детекція з прикладами
+- [x] PO-експорт із msgctxt (контекст подорожує з рядком)
+- [x] preset compose: власний пресет з ассетів кількох джерел (kind:preset)
+- [ ] LanguageTool server клієнт (grammar) — M2.5
+- [ ] Tauri UI для всього вище — M2.5

@@ -32,7 +32,16 @@ fn usage() {
          \x20 skri model auto <папка> <задача>                      автоматичний вибір рекомендованої\n\
          \x20 skri model set <папка> <задача> <модель>              перевизначити кнопкою\n\
          \x20 skri model status <папка>                            поточні призначення\n\
-         \x20 skri model tasks                                     список задач (кнопок)"
+         \x20 skri model tasks                                     список задач (кнопок)\n\
+         \x20 skri glossary add <папка> <term> <uk|en...> <uk|en...> [translation] [keep|translate|transliterate]\n\
+         \x20 skri glossary list <папка> <src> <tgt>                показати глосарій серії\n\
+         \x20 skri glossary series <папка>                          series_wide записи (для наступного тому)\n\
+         \x20 skri translate dry <папка> <док.md> <tgt>             промпти перекладу без виклику моделі\n\
+         \x20 skri translate segments <папка> <док.md> <tgt>        side-by-side сегменти зі статусами\n\
+         \x20 skri translate set <папка> <seg_id> <статус> <текст>  human/approved\n\
+         \x20 skri limits <текст> <tgt1:N,tgt2:N...>               перевірка лімітів ДО публікації\n\
+         \x20 skri tv <файл.md>                                    аналіз реєстру ти/ви\n\
+         \x20 skri preset compose <назва> <kind:preset...>         зібрати свій пресет з ассетів"
     );
 }
 
@@ -45,6 +54,10 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "search" => cmd_search(args)?,
         "preset" => cmd_preset(&args[1..])?,
         "model" => cmd_model(&args[1..])?,
+        "glossary" => cmd_glossary(&args[1..])?,
+        "translate" => cmd_translate(&args[1..])?,
+        "limits" => cmd_limits(&args[1..])?,
+        "tv" => cmd_tv(&args[1..])?,
         _ => usage(),
     }
     Ok(())
@@ -189,6 +202,22 @@ fn cmd_preset(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             let p = presets::load(name)?;
             println!("{}", serde_json::to_string_pretty(&p)?);
         }
+        Some("compose") => {
+            let name = rest
+                .get(1)
+                .cloned()
+                .unwrap_or_else(|| usage_exit("preset compose: вкажіть назву нового пресету"));
+            let spec = rest
+                .get(2)
+                .cloned()
+                .unwrap_or_else(|| usage_exit("preset compose: вкажіть ассети (kind:preset, напр. entities:novelist-uk checklists:note-taker-uk)"));
+            let p = presets::compose(&spec, &name, None)?;
+            let out = format!("{name}.preset.json");
+            presets::save_to_json(&p, std::path::Path::new(&out))?;
+            println!("✔ композитний пресет «{name}» → {out}");
+            println!("  сутності: {}", p.entities.iter().map(|e| e.name.as_str()).collect::<Vec<_>>().join(", "));
+            println!("  чеклісти: {}", p.checklists.iter().map(|c| c.name.as_str()).collect::<Vec<_>>().join(", "));
+        }
         other => {
             eprintln!("✖ невідома підкоманда preset: {:?}", other.unwrap_or(""));
             exit(2);
@@ -282,7 +311,6 @@ fn cmd_model(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 .map(String::as_str)
                 .unwrap_or_else(|| usage_exit("model menu: вкажіть папку"));
             let root = open_at(dir).root;
-
             println!("Оберіть ЗАДАЧУ (кнопка):");
             let tasks = models::catalog();
             for (i, t) in tasks.iter().enumerate() {
@@ -322,6 +350,145 @@ fn cmd_model(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("✔ збережено (вручну): {} → {model_id}", t.label);
             }
+        }
+    }
+    Ok(())
+}
+
+// --- M2: глосарій серії, перекладний пайплайн, ліміти, T-V ---
+
+use skri_core::glossary::{self, GlossaryEntry};
+use skri_core::loc::{self, LocalizedString};
+use skri_core::translate;
+use std::collections::BTreeMap;
+
+fn cmd_glossary(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    match rest.first().map(String::as_str) {
+        Some("add") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("glossary add: вкажіть папку"));
+            let store = open_at(dir);
+            let term = rest.get(2).cloned().unwrap_or_else(|| usage_exit("glossary add: вкажіть термін"));
+            let src = rest.get(3).cloned().unwrap_or_else(|| usage_exit("glossary add: мова джерела"));
+            let tgt = rest.get(4).cloned().unwrap_or_else(|| usage_exit("glossary add: мова перекладу"));
+            let translation = rest.get(5).cloned().unwrap_or_default();
+            let rule = rest.get(6).cloned().unwrap_or_else(|| {
+                if translation.is_empty() { "keep".into() } else { "translate".into() }
+            });
+            let id = glossary::upsert(&store, &GlossaryEntry {
+                id: 0, term, source_lang: src, target_lang: tgt,
+                canonical_translation: translation, rule,
+                notes: String::new(),
+                series_wide: true, // за замовчуванням — для всієї серії
+            })?;
+            println!("✔ глосарій: запис #{id} збережено (series_wide)");
+        }
+        Some("list") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("glossary list: вкажіть папку"));
+            let src = rest.get(2).map(String::as_str).unwrap_or_else(|| usage_exit("glossary list: мова джерела"));
+            let tgt = rest.get(3).map(String::as_str).unwrap_or_else(|| usage_exit("glossary list: мова перекладу"));
+            let store = open_at(dir);
+            for e in glossary::list(&store, src, tgt)? {
+                let mark = if e.series_wide { "⏳ серія" } else { "📄 том" };
+                println!("  ● {} → {} [{}] {mark} {}", e.term,
+                    if e.canonical_translation.is_empty() { "<НЕВИЗНАЧЕНО>" } else { &e.canonical_translation },
+                    e.rule, if e.notes.is_empty() { String::new() } else { format!("[{}]", e.notes) });
+            }
+        }
+        Some("series") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("glossary series: вкажіть папку"));
+            let store = open_at(dir);
+            let entries = glossary::series_export(&store)?;
+            println!("series_wide записів: {} (переноситься в наступний том)", entries.len());
+            let json = serde_json::to_string_pretty(&entries)?;
+            let out = store.root.join(".skri").join("glossary-series.json");
+            std::fs::write(&out, json)?;
+            println!("  експорт: {}", out.display());
+        }
+        _ => usage(),
+    }
+    Ok(())
+}
+
+fn cmd_translate(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let sub = rest.first().map(String::as_str).unwrap_or("segments");
+    match sub {
+        "dry" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("translate dry: вкажіть папку"));
+            let doc = rest.get(2).cloned().unwrap_or_else(|| usage_exit("translate dry: вкажіть документ"));
+            let tgt = rest.get(3).cloned().unwrap_or_else(|| usage_exit("translate dry: вкажіть цільову мову"));
+            let store = open_at(dir);
+            let prompts = translate::dry_run(&store, &doc, "uk", &tgt)?;
+            for (i, p) in prompts.iter().enumerate() {
+                println!("── сегмент {} ──\n{p}\n", i + 1);
+            }
+            println!("(dry-run: модель не викликалась; для машинного перекладу потрібна локальна Ollama)");
+        }
+        "segments" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("translate segments: вкажіть папку"));
+            let doc = rest.get(2).cloned().unwrap_or_else(|| usage_exit("translate segments: вкажіть документ"));
+            let tgt = rest.get(3).cloned().unwrap_or_else(|| usage_exit("translate segments: вкажіть мову"));
+            let store = open_at(dir);
+            for s in translate::segments(&store, &doc, &tgt)? {
+                println!("── #{} [{}, {}] ──", s.id, s.para_idx, s.status);
+                println!("  UK: {}", s.source_text.replace('\n', " "));
+                println!("  →: {}", if s.translated_text.is_empty() { "—" } else { &s.translated_text });
+            }
+        }
+        "set" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("translate set: вкажіть папку"));
+            let id: i64 = rest.get(2).and_then(|s| s.parse().ok()).unwrap_or_else(|| usage_exit("translate set: id сегмента"));
+            let status = rest.get(3).cloned().unwrap_or_else(|| usage_exit("translate set: статус (human|approved|mt|draft)"));
+            let text = rest.get(4..).map(|v| v.join(" ")).unwrap_or_default();
+            let store = open_at(dir);
+            translate::set_translation(&store, id, &text, &status)?;
+            println!("✔ сегмент #{id} → {status}");
+        }
+        _ => usage(),
+    }
+    Ok(())
+}
+
+fn cmd_limits(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let text = rest.first().cloned().unwrap_or_else(|| usage_exit("limits: вкажіть текст у лапках"));
+    let limits_arg = rest.get(1).cloned().unwrap_or_else(|| usage_exit("limits: вкажіть ліміти виду de:40,ja:25"));
+    let mut limits = BTreeMap::new();
+    for pair in limits_arg.split(',') {
+        let (lang, n) = pair.split_once(':').ok_or("формат ліміту: de:40")?;
+        limits.insert(lang.trim().to_string(), n.trim().parse::<usize>()?);
+    }
+    let s = LocalizedString {
+        key: "cli".into(),
+        source_text: text,
+        source_lang: "uk".into(),
+        limits,
+        context: BTreeMap::new(),
+    };
+    for c in loc::check_limits(&s) {
+        let flag = if c.over { "⚠ ПЕРЕВИЩЕННЯ" } else { "✔ ок" };
+        println!("  [{flag}] {} ×{:.2} → {} / ліміт {} ({})", c.lang, c.factor, c.projected_len, c.limit, c.advice);
+    }
+    Ok(())
+}
+
+fn cmd_tv(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let path = rest.first().cloned().unwrap_or_else(|| usage_exit("tv: вкажіть файл .md"));
+    let raw = std::fs::read_to_string(&path)?;
+    let body = skri_core::frontmatter::parse(&raw).body;
+    let r = loc::analyze_tv(&body);
+    if r.dominant == "none" {
+        println!("✔ T-V: прямих звернень ти/ви не знайдено");
+        return Ok(());
+    }
+    let dom = match r.dominant.as_str() {
+        "ty" => "«ти» (неформальний)",
+        "vy" => "«ви» (ввічливий/множина)",
+        _ => "ЗМІШАНИЙ реєстр",
+    };
+    println!("T-V: {dom} (ти-форм: {}, ви-форм: {})", r.ty_hits, r.vy_hits);
+    if r.mixed {
+        println!("⚠ Змішування реєстру — модель перекладу обирає ти/ви навмання:");
+        for ex in &r.examples {
+            println!("   «{ex}»");
         }
     }
     Ok(())

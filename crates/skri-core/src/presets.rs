@@ -122,6 +122,89 @@ pub fn load(name: &str) -> Result<PresetManifest> {
     )))
 }
 
+/// Композитор: зібрати ВЛАСНИЙ пресет з ассетів кількох джерел.
+///
+/// `spec` — рядок виду `"structure:novelist-uk checklists:academic-uk entities:novelist-uk"`,
+/// тобто `<asset_kind>:<preset_name>` через пробіл. Останній виграє при конфлікті.
+/// Результат валідується і повертається як маніфест (зберігайте `save_to_json`).
+pub fn compose(spec: &str, name: &str, language: Option<&str>) -> Result<PresetManifest> {
+    if name.trim().is_empty() {
+        return Err(Error::Invalid("порожня назва композитного пресету".into()));
+    }
+    let mut entities: Vec<EntityType> = Vec::new();
+    let mut structure: Option<serde_json::Value> = None;
+    let mut checklists: Vec<Checklist> = Vec::new();
+    let mut validators: BTreeMap<String, bool> = BTreeMap::new();
+    let mut templates: BTreeMap<String, String> = BTreeMap::new();
+    let mut ai_recipes: Vec<AiRecipe> = Vec::new();
+    let mut lang = language.unwrap_or("uk").to_string();
+
+    for part in spec.split_whitespace() {
+        let (kind, preset_name) = part.split_once(':').ok_or_else(|| {
+            Error::Invalid(format!(
+                "ассет «{part}» без ':пресет' (формат: kind:preset, напр. checklists:novelist-uk)"
+            ))
+        })?;
+        let src = load(preset_name)?;
+        match kind {
+            "entities" => {
+                for e in &src.entities {
+                    if !entities.iter().any(|x| x.name == e.name) {
+                        entities.push(e.clone());
+                    }
+                }
+            }
+            "structure" => structure = Some(src.structure.clone()),
+            "checklists" => {
+                for c in &src.checklists {
+                    if !checklists.iter().any(|x| x.name == c.name) {
+                        checklists.push(c.clone());
+                    }
+                }
+            }
+            "validators" => validators.extend(src.validators.clone()),
+            "templates" => templates.extend(src.templates.clone()),
+            "ai_recipes" => {
+                for r in &src.ai_recipes {
+                    if !ai_recipes.iter().any(|x| x.name == r.name) {
+                        ai_recipes.push(r.clone());
+                    }
+                }
+            }
+            "language" => lang = src.language.clone(),
+            other => {
+                return Err(Error::Invalid(format!(
+                    "невідомий вид ассета «{other}» (доступні: entities, structure, checklists, validators, templates, ai_recipes, language)"
+                )))
+            }
+        }
+    }
+
+    if entities.is_empty() {
+        return Err(Error::Invalid(
+            "композит не містить entities — додайте хоча б `entities:<пресет>`".into(),
+        ));
+    }
+    let manifest = PresetManifest {
+        preset: name.to_string(),
+        language: lang,
+        entities,
+        structure: structure.unwrap_or(serde_json::json!({})),
+        checklists,
+        validators,
+        templates,
+        ai_recipes,
+    };
+    manifest.validate()?;
+    Ok(manifest)
+}
+
+/// Зберегти маніфест у JSON-файл (для імпорту в іншому проєкті).
+pub fn save_to_json(p: &PresetManifest, path: &std::path::Path) -> Result<()> {
+    std::fs::write(path, serde_json::to_string_pretty(p)?)?;
+    Ok(())
+}
+
 /// Список вбудованих пресетів: (назва, опис).
 pub fn builtin_list() -> Vec<(String, String)> {
     BUILTIN

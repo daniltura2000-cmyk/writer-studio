@@ -66,3 +66,43 @@ r/selfpublish), форуми RoyalRoad/Zotero/Stage 32, GitHub issues, Trustpilo
 cargo test → 14 passed (4 unit + 3 models + 7... зведення: 0 failed)
 skri init/index/drift/bible/model/search — вручну на демо-проєкті: OK
 ```
+
+## 2026-11-05 (продовження) — M2: мультимовність і глосарій
+
+### Що зроблено
+- **glossary.rs** — серійний глосарій: upsert за (term, src, tgt), rule
+  (keep/translate/transliterate), series_wide переноситься між томами
+  (`glossary series` → .skri/glossary-series.json). Пост-валідатор ловить
+  „Alice becoming Elise" (перекладач перейменував персонажа) і невизначені
+  терміни (потрібне рішення автора). `prompt_block()` — авто-генерація
+  глосарій-блоку для промпта (замість ручної вставки в кожен запит).
+- **loc.rs** — ліміти символів per-language ЗАЗДАЛЕГІДЬ (фактори: de/fr/ru
+  ×1.30, uk ×1.15, CJK ×0.60); `worst_limit` для UI-підсвітки. T-V реєстр
+  (ти/ви): займенники + дієслівні закінчення, mixed-детекція з прикладами.
+  PO-експорт з msgctxt: контекст подорожує з рядком (speaker/tone).
+- **translate.rs** — пайплайн «локальна чернетка + людина»: paragraphs →
+  prepare (ідемпотентні сегменти) → build_prompt (глосарій-примус) →
+  run_mt через ЛОКАЛЬНУ Ollama (raw TCP HTTP/1.1 клієнт, std-only, chunked
+  розбір) → глосарій-валідація (порушення тримають статус draft) →
+  side-by-side зі статусами draft→mt→human→approved. Dry-run працює без
+  Ollama.
+- **presets::compose** — збирання ВЛАСНОГО пресету з ассетів різних джерел:
+  `entities:novelist-uk checklists:note-taker-uk validators:...` →
+  валідований маніфест → `.preset.json` (імпорт/експорт файлом).
+
+### CLI (нові)
+`glossary add|list|series`, `translate dry|segments|set`, `limits`,
+`tv`, `preset compose`.
+
+### Знайдені тестами/збіркою
+1. `std::http` не існує в stable → raw TCP HTTP/1.1 клієнт (std-only, без нових залежностей).
+2. `UNIQUE(lower(term),...)` в TABLE-констрейнті невалідний у SQLite →
+   `CREATE UNIQUE INDEX ... ON glossary(lower(term), ...)`.
+3. Run_mt: плейсхолдери `?2/?3` змістилися після правки → mismatched params.
+4. `unwrap_or_else` з `?` всередині — не компілюється → match.
+
+### Прогін
+```
+cargo test → 34 passed (15 unit + 11 acceptance M0/M1 + 8 acceptance M2), 0 failed
+CLI вручну: glossary/limits/tv/translate dry/preset compose — OK
+```

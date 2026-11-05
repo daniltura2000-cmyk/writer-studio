@@ -120,6 +120,28 @@ CREATE TABLE IF NOT EXISTS alerts (
   created_at INTEGER NOT NULL,
   resolved INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS glossary (
+  id INTEGER PRIMARY KEY,
+  term TEXT NOT NULL,
+  source_lang TEXT NOT NULL,
+  target_lang TEXT NOT NULL,
+  canonical_translation TEXT NOT NULL DEFAULT '',
+  rule TEXT NOT NULL DEFAULT 'translate',
+  notes TEXT NOT NULL DEFAULT '',
+  series_wide INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_glossary_key
+  ON glossary(lower(term), source_lang, target_lang);
+CREATE TABLE IF NOT EXISTS trans_segments (
+  id INTEGER PRIMARY KEY,
+  doc_path TEXT NOT NULL,
+  para_idx INTEGER NOT NULL,
+  source_text TEXT NOT NULL,
+  translated_text TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft',
+  target_lang TEXT NOT NULL,
+  UNIQUE(doc_path, para_idx, target_lang)
+);
 "#;
 
 impl ProjectStore {
