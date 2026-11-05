@@ -431,3 +431,62 @@ CLI вручну: timeline show (3 глави, кастомний календа
 доба 12), validate (чистий; конфлікт без (шлях) → алерт), locs (хто-де по
 главах, [переміщення]) — OK
 ```
+
+## 2026-11-05 (продовження) — Tauri UI: повноцінний редактор (M2.6)
+
+### Що зроблено
+- **Головний робочий екран «Студія»**: лівий сайдбар (340px) із чотирма
+  табами + центральна панель редактора. Темна тема (палітра в дусі
+  старого `.json`-блока: bg #0f1218, card #171b23, acc #818cf8).
+- **Таб «Глави»**: список `manuscript/*.md` (нова команда `list_docs` —
+  свіжий reindex + запит docs WHERE kind='manuscript', title з frontmatter
+  або з імені файла). Клік по главі → `read_doc`.
+- **Редактор**: textarea ТІЛА БЕЗ frontmatter; `write_doc` хірургічно
+  перечитує файл на момент збереження і підставляє нове тіло після
+  незміненого header-блока (frontmatter байт-в-байт, включно з
+  pub_status/pub_date для release) + одразу store.reindex() (індекс =
+  відображення файлів). Статус-бар: слів/символів лічильник on-input,
+  «Зберегти» + Ctrl+S (window keydown, preventDefault), час збереження.
+  Перехід на іншу главу з незбереженими змінами — confirm.
+- **Таб «Біблія»**: картки EntityCard (канон, тип, варіанти, згадки,
+  assertions) + кнопка «Реіндексувати»; ліниве завантаження при першому
+  відкритті таба, оновлення після кожного «Перевірити».
+- **Таб «Алерти»**: УСІ невирішені алери з БД (drift, assertion-conflict,
+  stat-change/stat-error, timeline-backwards/location-conflict,
+  crosspost-stale, episode-check, ink-external-change) з фільтром по kind
+  (укр. підписи KIND_LABELS), лічильник-бейдж на табі; collapsible
+  «Інструменти діалогів» (аудит змінних, barks, валідація епізоду) —
+  перенесені зі старого екрана.
+- **Таб «Реліз»**: kanban-колонки draft→edit→buffer→scheduled→published
+  (кожна глава має кнопку «→ наступний статус» через release::set_status;
+  published — без кнопки) + прогноз буфера (швидкість слів/день, розмір
+  буфера, днів до вичерпання, дата) через release::kanban + forecast(7).
+- **Кнопка «Перевірити»** (шапка): нова команда `run_checks` — повний
+  конвеєр reindex → scan → sync_bible → merge → scan_dialogue →
+  drift::detect → stats::rebuild → timeline::validate →
+  crosspost::check_stale; повертає зведення + усі алерти; UI перемикається
+  на таб «Алерти» і показує підсумок (плюс окремий warnbox для глав без
+  time-маркерів — попередження, не алерт).
+- **Вибір проєкту/пресету при запуску**: оверлей-екран, якщо шлях не
+  збережений або `.skri/settings.json` не знаходиться: text-input шляху +
+  select пресета (нова команда `list_presets` = presets::builtin_list()) +
+  «Відкрити» / «Створити новий проєкт» (нова команда `init_project` →
+  ProjectStore::init(root, preset, "uk")). Tauri-plugin-dialog НЕ додавався
+  (нульова залежність) — діалог вибору папки залишається вдосконаленням.
+  Фоновий probe проєкту при старті — тихий (без alert-спаму).
+- Структура: старі екрани «Напрямки»/«Моделі» збережені як верхні таби;
+  старі повноекранні «Біблія»/«Алерти» замінені сайдбар-табами.
+  `tauri.conf.json`: вікно 1280×820 (min 960×620).
+
+### Нові invoke-команди (app/tauri/src/commands.rs; core не змінено)
+`list_docs`, `read_doc`, `write_doc`, `list_presets`, `init_project`,
+`release_board`, `release_set_status`, `run_checks`.
+
+### Тести
+- 2 нові unit-тести в commands.rs: `write_doc_preserves_frontmatter`
+  (байт-в-байт header + тіло оновлене) і `list_docs_finds_manuscript`.
+```
+cargo test --workspace → 94 passed, 0 failed (92 попередні + 2 нові skri-tauri)
+cargo check --workspace → Finished (єдине наявне warning ядра: translate.rs unused import)
+node --check app.js → OK
+```

@@ -6,32 +6,120 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Оверлей вибору/створення проєкту (якщо settings не задані) -->
+  <div id="setup" class="overlay hidden">
+    <div class="setup-card">
+      <h2>Відкрити або створити проєкт</h2>
+      <div class="sub">Вкажіть папку проєкту (папку з <code>.skri/</code>) або створіть нову.
+        Пресет визначає набір ассетів і валідаторів. Діалог вибору папки з'явиться пізніше —
+        поки вкажіть шлях вручну; він запам'ятовується локально.</div>
+      <input id="setupRoot" type="text" placeholder="C:\шлях\до\проєкту">
+      <label class="fieldline">Пресет:
+        <select id="setupPreset"></select>
+      </label>
+      <div class="row">
+        <button id="setupOpen" class="primary">Відкрити</button>
+        <button id="setupCreate">Створити новий проєкт</button>
+      </div>
+      <div id="setupMsg" class="note"></div>
+    </div>
+  </div>
+
   <header>
     <h1>Writer Studio</h1>
     <div class="projbar">
       <input id="projRoot" type="text" placeholder="C:\шлях\до\проєкту (папка з .skri)">
       <button id="openProj">Відкрити</button>
       <span id="projState" class="proj-state"></span>
+      <span class="spacer"></span>
+      <button id="btnCheck" class="primary">Перевірити</button>
     </div>
   </header>
 
   <nav>
-    <button class="tab active" data-tab="onboarding">Напрямки</button>
+    <button class="tab active" data-tab="studio">Студія</button>
+    <button class="tab" data-tab="onboarding">Напрямки</button>
     <button class="tab" data-tab="models">Моделі</button>
-    <button class="tab" data-tab="bible">Біблія</button>
-    <button class="tab" data-tab="alerts">Алерти</button>
   </nav>
 
   <main>
+    <!-- ГОЛОВНИЙ РОБОЧИЙ ЕКРАН: сайдбар-таби + редактор -->
+    <section id="studio" class="screen active studio">
+      <aside id="side">
+        <div class="side-tabs">
+          <button class="stab active" data-stab="chapters">Глави</button>
+          <button class="stab" data-stab="bible">Біблія</button>
+          <button class="stab" data-stab="alerts">Алерти<span id="alertBadge" class="badge-n" hidden></span></button>
+          <button class="stab" data-stab="release">Реліз</button>
+        </div>
+
+        <!-- Таб «Глави»: список manuscript/*.md -->
+        <div id="stab-chapters" class="stabpane active">
+          <div class="row"><button id="btnReloadDocs" class="act">Оновити список</button></div>
+          <div id="docList" class="doclist"></div>
+        </div>
+
+        <!-- Таб «Біблія»: картки сутностей -->
+        <div id="stab-bible" class="stabpane">
+          <div class="row"><button id="btnIndex" class="act">Реіндексувати</button></div>
+          <div id="indexOut" class="json" hidden></div>
+          <div id="cards" class="cards-stacked"></div>
+        </div>
+
+        <!-- Таб «Алерти»: усі алерти всіх валідаторів + фільтр по kind -->
+        <div id="stab-alerts" class="stabpane">
+          <div class="row">
+            <select id="alertFilter"><option value="">усі kind</option></select>
+          </div>
+          <div id="alertsSummary" class="note"></div>
+          <div id="alertList" class="alertlist"></div>
+          <details class="tools">
+            <summary>Інструменти діалогів</summary>
+            <div class="row">
+              <button id="btnVars" class="act">Аудит змінних</button>
+              <button id="btnBarks" class="act">Bark-таблиця</button>
+            </div>
+            <div id="varsOut"></div>
+            <div id="barksOut"></div>
+            <div class="row">
+              <input id="epPath" type="text" placeholder="manuscript/ep01.md">
+              <button id="btnEpisode" class="act">Валідувати епізод</button>
+            </div>
+            <div id="epOut"></div>
+          </details>
+        </div>
+
+        <!-- Таб «Реліз»: kanban + прогноз буфера -->
+        <div id="stab-release" class="stabpane">
+          <div id="forecastBox" class="group"></div>
+          <div id="kanban" class="kanban"></div>
+        </div>
+      </aside>
+
+      <section id="editorPane">
+        <div id="editorHead">
+          <span id="docTitle">— глава не відкрита —</span>
+          <span id="docMeta" class="note"></span>
+        </div>
+        <textarea id="editor" spellcheck="false"
+          placeholder="Відкрийте главу ліворуч (сайдбар → «Глави»). Frontmatter тут не редагується — лише тіло."></textarea>
+        <div id="statusbar">
+          <span id="cntWords">0 слів · 0 символів</span>
+          <span id="saveState" class="note"></span>
+          <button id="btnSave" class="primary">Зберегти (Ctrl+S)</button>
+        </div>
+      </section>
+    </section>
+
     <!-- Онбордінг: 4 кнопки-напрямки -->
-    <section id="onboarding" class="screen active">
+    <section id="onboarding" class="screen page">
       <h2>Оберіть напрямок</h2>
       <div class="sub">Кожен напрямок — пресет з ассетів. Нижче — «якою буде кінцева програма».</div>
       <div class="dir-grid" id="dirs"></div>
     </section>
 
     <!-- Моделі: кнопковий каталог -->
-    <section id="models" class="screen">
+    <section id="models" class="screen page">
       <h2>Вибір моделі — по суті задачі</h2>
       <div class="sub">Каталог живиться з <code>models::catalog_json()</code>. Автовибір рекомендований і завжди локальний; хмара — лише вручну.</div>
       <div class="grid" id="tasks"></div>
@@ -42,34 +130,6 @@
       <div class="json" id="modelOut">— виберіть задачу і модель —</div>
       <div class="note">Вибір зберігається в <code>.skri/settings.json</code> → розділ «models».
         Ті самі дані доступні з CLI: <code>skri model menu|auto|set|status</code>.</div>
-    </section>
-
-    <!-- Біблія: картки сутностей -->
-    <section id="bible" class="screen">
-      <h2>Story Bible</h2>
-      <div class="sub">Картки сутностей = агрегат згадок + assertions з bible/*.md.</div>
-      <button id="btnIndex">Реіндексувати проєкт</button>
-      <div class="json" id="indexOut" hidden></div>
-      <div class="cards" id="cards"></div>
-    </section>
-
-    <!-- Алерти: drift / conflict / stats -->
-    <section id="alerts" class="screen">
-      <h2>Алерти консистентності</h2>
-      <div class="sub">Name-drift, канон-конфлікти, аудит змінних, barks, валідація епізоду.</div>
-      <div class="row">
-        <button id="btnDrift">Скан drift і конфліктів</button>
-        <button id="btnVars">Аудит змінних</button>
-        <button id="btnBarks">Bark-таблиця</button>
-      </div>
-      <div id="driftOut"></div>
-      <div class="row">
-        <input id="epPath" type="text" placeholder="manuscript/ep01.md">
-        <button id="btnEpisode">Валідувати епізод</button>
-      </div>
-      <div id="epOut"></div>
-      <div id="varsOut"></div>
-      <div id="barksOut"></div>
     </section>
   </main>
 

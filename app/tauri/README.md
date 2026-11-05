@@ -18,9 +18,24 @@
   - `barks(root)` — `narrative::barks`;
   - `episode_validate(root, rel)` — `animation::validate_episode` + `mute_test` + `check_bible_rules`
     (формат 20-хв епізоду за замовчуванням);
-  - `set_model(root, task, model, auto)` — `models::set_model` (кнопка каталогу → settings.json).
-- `ui/` — статичний фронт (index.html + app.js + style.css), екрани:
-  Напрямки / Моделі / Біблія / Алерти. Стиль — з мокапу `docs/ui/model-picker.html`.
+  - `set_model(root, task, model, auto)` — `models::set_model` (кнопка каталогу → settings.json);
+  - редактор (M2.6): `list_docs(root)` — глави manuscript/ (reindex + docs),
+    `read_doc(root, rel)` — тіло без frontmatter + метадані,
+    `write_doc(root, rel, body)` — тіло під незміненим header-блоком (frontmatter
+    байт-в-байт) + reindex;
+  - онбордінг: `list_presets()` — `presets::builtin_list()`,
+    `init_project(root, preset)` — `ProjectStore::init(root, preset, "uk")`;
+  - реліз: `release_board(root)` — `release::kanban` + `release::forecast(7)`,
+    `release_set_status(root, rel, status, pub_date)` — `release::set_status`
+    (pub_status пишеться прямо у frontmatter файлу);
+  - перевірка: `run_checks(root)` — повний конвеєр reindex → scan → біблія →
+    merge → діалоги → drift → stats::rebuild → timeline::validate →
+    crosspost::check_stale; зведення + УСІ невирішені алери.
+- `ui/` — статичний фронт (index.html + app.js + style.css), темна тема.
+  Головний екран «Студія»: сайдбар-таби (Глави / Біблія / Алери / Реліз) +
+  центральний редактор тіла глави зі статус-баром (слова/символи, збереження
+  кнопкою та Ctrl+S). Старі екрани Напрямки/Моделі — верхні таби.
+  Оверлей вибору/створення проєкту при запуску (шлях вручну + пресет).
   Фронт звертається до бекенда через `window.__TAURI__.core.invoke`.
 
 ## Запуск (повна збірка, коли потрібна)

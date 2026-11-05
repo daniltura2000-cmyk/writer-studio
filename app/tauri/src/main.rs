@@ -15,6 +15,14 @@ fn main() {
             commands::barks,
             commands::episode_validate,
             commands::set_model,
+            commands::list_docs,
+            commands::read_doc,
+            commands::write_doc,
+            commands::list_presets,
+            commands::init_project,
+            commands::release_board,
+            commands::release_set_status,
+            commands::run_checks,
         ])
         .run(tauri::generate_context!())
         .expect("помилка запуску Writer Studio");
