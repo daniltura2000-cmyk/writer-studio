@@ -18,6 +18,8 @@ pub mod inkbridge;
 pub mod loc;
 pub mod models;
 pub mod narrative;
+pub mod notes;
+pub mod pitch;
 pub mod presets;
 pub mod recap;
 pub mod release;

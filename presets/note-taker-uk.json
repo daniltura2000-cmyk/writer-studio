@@ -13,6 +13,13 @@
     { "name": "оформлення нотатки", "items": ["одна думка", "лінки на джерела"] }
   ],
   "validators": {
-    "assertion-conflict": true
+    "assertion-conflict": true,
+    "broken-links": true,
+    "orphan-notes": true,
+    "stale-notes": true
+  },
+  "templates": {
+    "daily-note": "---\ntitle: Щоденник {{date}}\ndate: {{date}}\n---\n\n# Щоденник — {{date}}\n\n← [[{{yesterday}}]] · [[{{tomorrow}}]] →\n\n## День\n\n- \n",
+    "topic-note": "---\ntitle: {{title}}\ndate: {{date}}\n---\n\n# {{title}}\n\n## Суть (одна думка)\n\n## Джерела\n\n"
   }
 }

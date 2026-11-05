@@ -62,6 +62,21 @@ fn usage() {
          \x20 skri timeline show <папка>                        лінійка днів по главах (календар світу)\n\
          \x20 skri timeline validate <папка>                     стрибки назад, глави без маркерів, конфлікти локацій\n\
          \x20 skri timeline locs <папка>                         локаційний календар: хто де по главах\n\
+         \x20 skri pitch add <папка> <назва> [видання] [YYYY-MM-DD] [--followup N] [--note док.md]  пітч у видання\n\
+         \x20 skri pitch list <папка>                             реєстр пітчів\n\
+         \x20 skri pitch set <папка> <id> <статус> [YYYY-MM-DD]    перехід статусу (sent_date) або followup <N>\n\
+         \x20 skri pitch followup <папка>                         кандидати на follow-up лист\n\
+         \x20 skri pitch stats <папка>                            конверсія idea→published + час у статусах\n\
+         \x20 skri fact add <папка> <твердження> [джерело] [док.md [offset]]  факт у леджер (неперевірений)\n\
+         \x20 skri fact list <папка>                              факт-леджер\n\
+         \x20 skri fact unverified <папка>                        твердження без verified=1 перед здачею\n\
+         \x20 skri fact verify <папка> <id>                       позначити перевіреним\n\
+         \x20 skri fact decay <папка> [--days 365]                перевірене, але застаріле (content decay)\n\
+         \x20 skri notes links <папка>                            граф [[вікі-лінків]]: беклінки, broken, сироти\n\
+         \x20 skri notes orphans <папка>                          нотатки без вхідних лінків\n\
+         \x20 skri notes stale <папка> [--days 30]                нотатки без змін N днів\n\
+         \x20 skri notes daily <папка>                            щоденник notes/YYYY-MM-DD.md з лінком на вчора\n\
+         \x20 skri notes new <папка> <назва>                      тематична нотатка з шаблону topic-note\n\
          \x20 skri preset compose <назва> <kind:preset...>         зібрати свій пресет з ассетів"
     );
 }
@@ -91,6 +106,9 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "retcon" => cmd_retcon(&args[1..])?,
         "recap" => cmd_recap(args)?,
         "timeline" => cmd_timeline(&args[1..])?,
+        "pitch" => cmd_pitch(&args[1..])?,
+        "fact" => cmd_fact(&args[1..])?,
+        "notes" => cmd_notes(&args[1..])?,
         _ => usage(),
     }
     Ok(())
@@ -138,6 +156,8 @@ fn print_directions(store: &ProjectStore) -> Result<(), Box<dyn std::error::Erro
          " Show Bible з правилами світу, валідатор 20-хв епізоду (cold open + 2 turns + hook), мют-тест сцен. Кінцева програма: рев'юер епізодів."),
         ("note-taker-uk", "Нотатник / Zettelkasten",
          " Атомарні нотатки + композитор рукопису. Кінцева програма: база знань, що зшивається в тексти."),
+        ("journalist-uk", "Журналіст / нон-фікшн",
+         " Pitch CRM (idea→published + follow-up), факт-леджер з верифікацією, беклінки нотаток. Кінцева програма: матеріал, здатний до публікації без неперевірених тверджень."),
     ];
     println!("\nНапрямки, які можна увімкнути (кожен — пресет з ассетів):");
     for (id, title, desc) in paths {
@@ -1204,6 +1224,295 @@ fn cmd_timeline(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         other => {
             eprintln!("✖ невідома підкоманда timeline: {other} (show|validate|locs)");
+            exit(2);
+        }
+    }
+}
+
+// --- M6: Журналістика — pitch CRM + факт-леджер (специфікація §5.11) ---
+
+fn cmd_pitch(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use skri_core::pitch;
+    use skri_core::release;
+    match rest.first().map(String::as_str) {
+        Some("add") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("pitch add: вкажіть папку"));
+            let title = rest.get(2).cloned().unwrap_or_else(|| usage_exit("pitch add: вкажіть назву пітча"));
+            let outlet = rest.get(3).cloned().unwrap_or_default();
+            // 4-й позиційний аргумент — дедлайн, лише якщо це справді дата
+            let due = rest.get(4).map(String::as_str).filter(|s| release::parse_ymd(s).is_some());
+            let followup: i64 = flag(rest, "--followup").and_then(|s| s.parse().ok()).unwrap_or(pitch::DEFAULT_FOLLOWUP_DAYS);
+            let note = flag(rest, "--note");
+            let store = open_at(dir);
+            let id = pitch::add(&store, &title, &outlet, due, followup, note.as_deref(), pitch::now_epoch())?;
+            println!("✔ пітч #{id} «{title}» → {} (статус idea)", if outlet.is_empty() { "—" } else { &outlet });
+            Ok(())
+        }
+        Some("list") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("pitch list: вкажіть папку"));
+            let store = open_at(dir);
+            let rows = pitch::list(&store)?;
+            if rows.is_empty() {
+                println!("пітчів немає — skri pitch add <папка> <назва> [видання]");
+                return Ok(());
+            }
+            println!("{:<4} {:<12} {:<30} {:<18} {:<11} {:<11} {}", "id", "статус", "назва", "видання", "sent", "due", "фолоу");
+            for p in &rows {
+                println!(
+                    "{:<4} {:<12} {:<30} {:<18} {:<11} {:<11} {}д",
+                    p.id,
+                    p.status,
+                    truncate(&p.title, 28),
+                    truncate(&p.outlet, 16),
+                    p.sent_date.map(release::fmt_date).unwrap_or_else(|| "—".into()),
+                    p.due_date.map(release::fmt_date).unwrap_or_else(|| "—".into()),
+                    p.followup_after_days,
+                );
+            }
+            println!("\nразом: {} (статуси: {})", rows.len(), pitch::STATUSES.join(" → "));
+            Ok(())
+        }
+        Some("set") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("pitch set: вкажіть папку"));
+            let id: i64 = rest.get(2).and_then(|s| s.parse().ok()).unwrap_or_else(|| usage_exit("pitch set: вкажіть id пітча"));
+            let what = rest.get(3).cloned().unwrap_or_else(|| usage_exit("pitch set: вкажіть статус або followup"));
+            let val = rest.get(4).cloned();
+            let store = open_at(dir);
+            if what == "followup" {
+                let days: i64 = val.and_then(|s| s.parse().ok()).unwrap_or_else(|| usage_exit("pitch set followup: вкажіть кількість днів"));
+                pitch::set_followup(&store, id, days)?;
+                println!("✔ норма фолоу-апу пітча #{id} → {days} днів");
+            } else {
+                let date = val.filter(|s| release::parse_ymd(s).is_some());
+                let p = pitch::set_status(&store, id, &what, date.as_deref(), pitch::now_epoch())?;
+                let sent = p.sent_date.map(release::fmt_date).unwrap_or_else(|| "—".into());
+                println!("✔ пітч #{id} «{}» → {} (sent: {sent})", p.title, p.status);
+            }
+            Ok(())
+        }
+        Some("followup") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("pitch followup: вкажіть папку"));
+            let store = open_at(dir);
+            let cand = pitch::followup_candidates(&store, pitch::now_epoch())?;
+            if cand.is_empty() {
+                println!("✔ кандидатів на follow-up немає — усі дотики свіжі");
+                return Ok(());
+            }
+            println!("⚠ кандидатів на follow-up лист: {}", cand.len());
+            for p in &cand {
+                let sent = p.sent_date.map(release::fmt_date).unwrap_or_default();
+                let overdue = (pitch::now_epoch() - (p.sent_date.unwrap_or(0) + p.followup_after_days * 86_400)) / 86_400;
+                println!(
+                    "  #{id} «{title}» — {outlet}, sent {sent}, норма {n}д, прострочено ~{overdue}д",
+                    id = p.id, title = p.title, outlet = p.outlet, n = p.followup_after_days
+                );
+            }
+            Ok(())
+        }
+        Some("stats") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("pitch stats: вкажіть папку"));
+            let store = open_at(dir);
+            let s = pitch::stats(&store, pitch::now_epoch())?;
+            if s.total == 0 {
+                println!("пітчів немає — статистики поки немає");
+                return Ok(());
+            }
+            println!("Пітчів: {}, published: {}, конверсія idea→published: {:.1}%", s.total, s.published, s.conversion);
+            let by: Vec<String> = s.by_status.iter().map(|(k, n)| format!("{k}: {n}")).collect();
+            println!("  по статусах: {}", by.join(", "));
+            if !s.avg_days_in_status.is_empty() {
+                println!("  середній час у статусах:");
+                for (k, days) in &s.avg_days_in_status {
+                    println!("    {k:<14} {:.1} днів", days);
+                }
+            }
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда pitch: {other:?} (add|list|set|followup|stats)");
+            exit(2);
+        }
+    }
+}
+
+fn cmd_fact(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use skri_core::pitch;
+    match rest.first().map(String::as_str) {
+        Some("add") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("fact add: вкажіть папку"));
+            let claim = rest.get(2).cloned().unwrap_or_else(|| usage_exit("fact add: вкажіть твердження (в лапках)")).trim_matches('"').to_string();
+            let source = rest.get(3).cloned().unwrap_or_default();
+            let doc = rest.get(4).cloned();
+            let offset: Option<i64> = rest.get(5).and_then(|s| s.parse().ok());
+            let store = open_at(dir);
+            let id = pitch::fact_add(&store, &claim, &source, doc.as_deref(), offset)?;
+            println!("✔ факт #{id} додано (неперевірений): {claim}");
+            Ok(())
+        }
+        Some("list") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("fact list: вкажіть папку"));
+            let store = open_at(dir);
+            let rows = pitch::facts(&store)?;
+            if rows.is_empty() {
+                println!("факт-леджер порожній — skri fact add <папка> \"<твердження>\" [джерело]");
+                return Ok(());
+            }
+            for f in &rows {
+                let mark = if f.verified { "✔" } else { "⚠" };
+                println!("{mark} #{id} {claim}", id = f.id, claim = truncate(&f.claim, 60));
+                if !f.source_ref.is_empty() {
+                    println!("    джерело: {}", f.source_ref);
+                }
+                if let Some(d) = &f.doc_path {
+                    println!("    де: {d} @{}", f.char_start.unwrap_or(0));
+                }
+            }
+            let un = rows.iter().filter(|f| !f.verified).count();
+            println!("\nразом: {} (неперевірених: {})", rows.len(), un);
+            Ok(())
+        }
+        Some("unverified") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("fact unverified: вкажіть папку"));
+            let store = open_at(dir);
+            let rows = pitch::unverified_facts(&store)?;
+            if rows.is_empty() {
+                println!("✔ усі твердження перевірені — можна здавати");
+                return Ok(());
+            }
+            println!("⚠ неперевірених тверджень: {} (верифікація перед публікацією)", rows.len());
+            for f in &rows {
+                match (&f.doc_path, f.char_start) {
+                    (Some(d), o) => println!("  ⚠ #{} {} — {} @{}", f.id, truncate(&f.claim, 50), d, o.unwrap_or(0)),
+                    (None, _) => println!("  ⚠ #{} {} (без прив'язки до рукопису)", f.id, truncate(&f.claim, 50)),
+                }
+                if !f.source_ref.is_empty() {
+                    println!("      джерело: {}", f.source_ref);
+                }
+            }
+            Ok(())
+        }
+        Some("verify") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("fact verify: вкажіть папку"));
+            let id: i64 = rest.get(2).and_then(|s| s.parse().ok()).unwrap_or_else(|| usage_exit("fact verify: вкажіть id факта"));
+            let store = open_at(dir);
+            pitch::fact_verify(&store, id, pitch::now_epoch())?;
+            println!("✔ факт #{id} позначено перевіреним");
+            Ok(())
+        }
+        Some("decay") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("fact decay: вкажіть папку"));
+            let days: i64 = flag(rest, "--days").and_then(|s| s.parse().ok()).unwrap_or(pitch::DEFAULT_DECAY_DAYS);
+            let store = open_at(dir);
+            let rows = pitch::decayed_facts(&store, pitch::now_epoch(), days)?;
+            if rows.is_empty() {
+                println!("✔ застарілих перевірених тверджень немає (вікно {days} днів)");
+                return Ok(());
+            }
+            println!("⚠ перевірених тверджень старше {days} днів: {} — пере-перевірити", rows.len());
+            for f in &rows {
+                println!("  ⚠ #{} {} (верифіковано {} днів тому)", f.id, truncate(&f.claim, 50), (pitch::now_epoch() - f.verified_at.unwrap_or(0)) / 86_400);
+            }
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда fact: {other:?} (add|list|unverified|verify|decay)");
+            exit(2);
+        }
+    }
+}
+
+// --- M6: Нотатник — беклінки, daily, сироти/stale (специфікація §5.10) ---
+
+fn cmd_notes(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use skri_core::notes;
+    use skri_core::pitch;
+    let sub = rest.first().map(String::as_str).unwrap_or("links");
+    match sub {
+        "links" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("notes links: вкажіть папку"));
+            let store = open_at(dir);
+            store.reindex()?;
+            let n = notes::rebuild_links(&store)?;
+            if n == 0 {
+                println!("[[вікі-лінків]] у notes/ немає");
+                return Ok(());
+            }
+            let rep = notes::report(&store)?;
+            println!("Лінків: {} (резолвнуто {}, broken {})", rep.total, rep.resolved, rep.broken.len());
+            let mut cur = String::new();
+            for r in notes::links(&store)? {
+                if r.from_doc != cur {
+                    cur = r.from_doc.clone();
+                    println!("\n● {cur}");
+                }
+                match &r.target_doc {
+                    Some(t) => println!("  → [[{}]] → {t}", r.to_title),
+                    None => println!("  → [[{}]] ⚠ broken", r.to_title),
+                }
+            }
+            if !rep.broken.is_empty() {
+                println!("\n⚠ broken-лінків: {}", rep.broken.len());
+            }
+            if !rep.orphans.is_empty() {
+                println!(" сиріт (без вхідних): {} — skri notes orphans", rep.orphans.len());
+            }
+            Ok(())
+        }
+        "orphans" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("notes orphans: вкажіть папку"));
+            let store = open_at(dir);
+            store.reindex()?;
+            notes::rebuild_links(&store)?;
+            let rows = notes::orphans(&store)?;
+            if rows.is_empty() {
+                println!("✔ сиріт немає — у кожної нотатки є вхідні лінки");
+                return Ok(());
+            }
+            println!("⚠ нотаток без вхідних лінків: {}", rows.len());
+            for p in &rows {
+                println!("  ● {p}");
+            }
+            Ok(())
+        }
+        "stale" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("notes stale: вкажіть папку"));
+            let days: i64 = flag(rest, "--days").and_then(|s| s.parse().ok()).unwrap_or(30);
+            let store = open_at(dir);
+            store.reindex()?;
+            let rows = notes::stale(&store, pitch::now_epoch(), days)?;
+            if rows.is_empty() {
+                println!("✔ нотаток без змін {days}+ днів немає");
+                return Ok(());
+            }
+            println!("⚠ нотаток без змін {days}+ днів: {}", rows.len());
+            for (p, age) in &rows {
+                println!("  ● {p} — {age} днів без змін");
+            }
+            Ok(())
+        }
+        "daily" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("notes daily: вкажіть папку"));
+            let store = open_at(dir);
+            let d = notes::daily(&store, pitch::now_epoch())?;
+            if d.created {
+                store.reindex()?;
+                println!("✔ щоденник створено: {} (← [[{}]], → [[{}]])", d.path, d.yesterday, d.tomorrow);
+            } else {
+                println!("щоденник уже існує: {} (не перезаписано)", d.path);
+            }
+            Ok(())
+        }
+        "new" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("notes new: вкажіть папку"));
+            let title = rest.get(2).cloned().unwrap_or_else(|| usage_exit("notes new: вкажіть назву нотатки"));
+            let store = open_at(dir);
+            let rel = notes::new_note(&store, &title, pitch::now_epoch())?;
+            store.reindex()?;
+            println!("✔ нотатку створено: {rel}");
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда notes: {other} (links|orphans|stale|daily|new)");
             exit(2);
         }
     }

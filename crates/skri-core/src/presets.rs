@@ -98,6 +98,7 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("note-taker-uk", include_str!("../../../presets/note-taker-uk.json")),
     ("game-narrative-uk", include_str!("../../../presets/game-narrative-uk.json")),
     ("animation-uk", include_str!("../../../presets/animation-uk.json")),
+    ("journalist-uk", include_str!("../../../presets/journalist-uk.json")),
 ];
 
 /// Завантажити вбудований пресет за назвою.

@@ -490,3 +490,76 @@ cargo test --workspace → 94 passed, 0 failed (92 попередні + 2 нов
 cargo check --workspace → Finished (єдине наявне warning ядра: translate.rs unused import)
 node --check app.js → OK
 ```
+
+## 2026-11-05 (продовження) — M6: Журналістика (pitch CRM + факт-леджер) і Нотатник
+
+### Що зроблено
+- **pitch.rs** — Pitch CRM + Fact Ledger (§5.11):
+  - pitch lifecycle: `pitches(id, title, outlet, status, due_date, sent_date,
+    followup_after_days, last_touch, note_doc)` + журнал переходів `pitch_log`
+    (перший запис — створення як idea; для статистики часу). Статуси
+    idea → pitched → followed_up → assigned → drafting → submitted →
+    published|rejected; опційний документ-заметка (--note). CRM-дані живуть
+    у БД (як glossary) — перебудувати з файлів їх неможливо, це свідомо.
+  - follow-up: due = sent_date + followup_after_days; кандидат = due вже
+    настала, а last_touch давніша за due; термінальні статуси не нагорять.
+    Backdated sent_date при `set` фіксує last_touch = дата події (запис
+    історії заднім числом не гасить нагадування сам собою).
+  - `pitch stats`: конверсія idea→published (%), розклад по статусах,
+    середній час у статусах з pitch_log (чиста `avg_time_in_status`,
+    останній інтервал тягнеться до `now`).
+  - факт-леджер: `facts(claim, source_ref, verified 0|1, doc_path,
+    char_start, verified_at)`; `fact unverified` — твердження без verified=1
+    перед здачею (прив'язані до рукопису — першими); `fact decay [--days]` —
+    content decay: перевірене, але старше N днів повертається на
+    пере-перевірку. Дати — epoch UTC через публічні release::parse_ymd/
+    fmt_date; функції, що залежать від «зараз», приймають `now` параметром
+    (чиста логіка тестується без системного часу).
+- **notes.rs** — нотатник (§5.10):
+  - беклінки: скан notes/*.md на `[[вікі-лінки]]` (укр+латиниця,
+    `[[target|alias]]`, `#розділ`/`^блок` відрізаються) з байтовими offset у
+    тілі; таблиця `links(from_doc, to_title, target_doc, char_start,
+    char_end)` перебудовується ідемпотентно; резолв по імені файла без
+    розширення (без регістру) серед УСІХ документів проєкту; звіт
+    `notes links` — граф + broken + сироти.
+  - daily notes: `notes/YYYY-MM-DD.md` із шаблону пресету
+    (`templates.daily-note`, плейсхолдери {{date}}/{{yesterday}}/{{tomorrow}},
+    фолбек — вбудований) з auto-insert лінками вчора/завтра; існуючий файл
+    НЕ перезаписується. `notes new` — тематична нотатка з topic-note.
+  - `notes orphans` (без вхідних), `notes stale [--days 30]` (без змін N
+    днів по mtime з docs; manuscript не потрапляє — фільтр kind='notes').
+- **Пресети**: новий `presets/journalist-uk.json` (validators:
+  fact-unverified-check, pitch-followup; templates: pitch-card, fact-entry;
+  сутності джерело/інтерв'ю/твердження/пітч) + `note-taker-uk.json`
+  розширено сумісно (validators: broken-links, orphan-notes, stale-notes;
+  templates: daily-note, topic-note) — структура маніфесту вже підтримувала
+  обидві секції, presets.rs не змінено (крім реєстрації BUILTIN).
+- **CLI**: `skri pitch add|list|set|followup|stats`,
+  `skri fact add|list|unverified|verify|decay`,
+  `skri notes links|orphans|stale|daily|new`; journalist-uk додано в
+  огляд напрямків після init. Публічні API інших модулів не змінено.
+
+### Знайдені тестами (і виправлені)
+1. Синтетичні epoch у тестах vs `now_epoch()` при створенні: запис створення
+   в pitch_log із реальним часом ламав хронологію інтервалів → `add` приймає
+   `at` параметром (CLI передає now_epoch()).
+2. `avg_time_in_status` повертав середнє без p4 (пітч-ідея без переходів) —
+   модульний тест спершу не мав пітча, що залишився в idea; +запис.
+3. Тест stale оновлював mtime у docs, а наступний reindex (файл «змінився»
+   відносно синтетичного mtime) скидав його назад → реіндекс у тесті
+   відпрацьовує ДО підстановки mtime; рукопис із старим mtime перевіряється
+   фільтром kind='notes' в одному запиті.
+4. Borrow-of-moved у avg_time_in_status (map зі зсувом) → обчислення до move.
+
+### Прогін
+```
+cargo test --workspace → 106 passed, 0 failed (32 unit, вкл. 3 нові чисті;
+  acceptance M0–M5 + 9 нових m6_journal_notes: lifecycle+log, followup-кандидати,
+  stats конверсія/час, facts unverified/verify/decay, вікі-лінки укр+лат offsetи,
+  резолв+broken+сироти+ідемпотентність, stale по mtime, daily з лінком на вчора,
+  обидва пресети; + 2 skri-tauri)
+cargo build --workspace → warnings лише наявні (translate.rs)
+CLI вручну (журналіст-проєкт): pitch add/list/set (sent 2026-10-01 →
+  followup-кандидат «прострочено ~21д»)/stats; fact add→unverified (@30)→verify;
+  notes daily (лінк на вчора) → new → links (граф, broken 3) → orphans/stale — OK
+```
