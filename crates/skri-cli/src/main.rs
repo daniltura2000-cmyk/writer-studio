@@ -1,7 +1,7 @@
 //! Writer Studio CLI (`skri`): init / index / bible / drift / preset / search.
 //! Локально, безкоштовно, українською.
 
-use skri_core::{bible, drift, indexer, models, presets, ProjectStore};
+use skri_core::{bible, drift, indexer, models, presets, scrub, ProjectStore};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -77,6 +77,8 @@ fn usage() {
          \x20 skri notes stale <папка> [--days 30]                нотатки без змін N днів\n\
          \x20 skri notes daily <папка>                            щоденник notes/YYYY-MM-DD.md з лінком на вчора\n\
          \x20 skri notes new <папка> <назва>                      тематична нотатка з шаблону topic-note\n\
+         \x20 skri scrub build <папка> <вихід.epub> [--pen «Ім'я»] [--light] [--date YYYY-MM-DD]  EPUB зі scrub метаданих\n\
+         \x20 skri scrub report <папка>                          останній scrub-звіт (що саме замінено)\n\
          \x20 skri preset compose <назва> <kind:preset...>         зібрати свій пресет з ассетів"
     );
 }
@@ -109,6 +111,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "pitch" => cmd_pitch(&args[1..])?,
         "fact" => cmd_fact(&args[1..])?,
         "notes" => cmd_notes(&args[1..])?,
+        "scrub" => cmd_scrub(&args[1..])?,
         _ => usage(),
     }
     Ok(())
@@ -1513,6 +1516,92 @@ fn cmd_notes(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         other => {
             eprintln!("✖ невідома підкоманда notes: {other} (links|orphans|stale|daily|new)");
+            exit(2);
+        }
+    }
+}
+
+/// `skri scrub build <папка> <вихід.epub> [--pen «Ash Thornwood»] [--light] [--date YYYY-MM-DD]`
+/// `skri scrub report <папка>` — останній scrub-звіт.
+fn cmd_scrub(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    match rest.first().map(String::as_str) {
+        Some("build") => {
+            let dir = rest
+                .get(1)
+                .map(String::as_str)
+                .unwrap_or_else(|| usage_exit("scrub build: вкажіть папку проєкту"));
+            let out = rest
+                .get(2)
+                .cloned()
+                .unwrap_or_else(|| usage_exit("scrub build: вкажіть вихідний файл .epub"));
+            if !out.ends_with(".epub") {
+                usage_exit("scrub build: вихідний файл мусить мати розширення .epub");
+            }
+            let store = open_at(dir);
+            let mode = if rest.iter().any(|a| a == "--light") {
+                scrub::ScrubMode::Light
+            } else {
+                scrub::ScrubMode::Full
+            };
+            let opts = scrub::ScrubOptions {
+                mode,
+                pen_name: flag(rest, "--pen"),
+                date: flag(rest, "--date"),
+            };
+            let rep = scrub::build(&store, Path::new(&out), &opts)?;
+            println!(
+                "✔ EPUB зібрано: {} ({} глав, sha256 {})",
+                rep.output,
+                rep.chapters.len(),
+                &rep.sha256[..16]
+            );
+            println!(
+                "  режим scrub: {}; pen name: «{}»; назва: «{}»; дата: {}",
+                rep.mode, rep.pen_name, rep.title, rep.date
+            );
+            if rep.changes.is_empty() {
+                println!("  замін метаданих немає");
+            } else {
+                println!("  scrub-звіт:");
+                for c in &rep.changes {
+                    println!("    • {c}");
+                }
+            }
+            println!("  повний звіт: skri scrub report {}", dir);
+            Ok(())
+        }
+        Some("report") => {
+            let dir = rest
+                .get(1)
+                .map(String::as_str)
+                .unwrap_or_else(|| usage_exit("scrub report: вкажіть папку проєкту"));
+            let store = open_at(dir);
+            match scrub::last_report(&store)? {
+                Some(rep) => {
+                    println!(
+                        "Останній scrub-звіт ({}, EPUB {}):",
+                        rep.mode, rep.output
+                    );
+                    println!("  назва: «{}», pen name: «{}», мова: {}, дата: {}", rep.title, rep.pen_name, rep.language, rep.date);
+                    println!("  глав: {}, sha256: {}", rep.chapters.len(), rep.sha256);
+                    if rep.changes.is_empty() {
+                        println!("  замін метаданих немає");
+                    } else {
+                        println!("  заміни/видалення:");
+                        for c in &rep.changes {
+                            println!("    • {c}");
+                        }
+                    }
+                    Ok(())
+                }
+                None => {
+                    println!("звіту ще немає — спершу: skri scrub build <папка> <вихід.epub>");
+                    Ok(())
+                }
+            }
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда scrub: {:?} (build|report)", other.unwrap_or(""));
             exit(2);
         }
     }

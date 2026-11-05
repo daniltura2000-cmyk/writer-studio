@@ -25,6 +25,7 @@ pub mod recap;
 pub mod release;
 pub mod retcon;
 pub mod royalty;
+pub mod scrub;
 pub mod stats;
 pub mod store;
 pub mod timeline;

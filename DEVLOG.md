@@ -563,3 +563,58 @@ CLI вручну (журналіст-проєкт): pitch add/list/set (sent 202
   followup-кандидат «прострочено ~21д»)/stats; fact add→unverified (@30)→verify;
   notes daily (лінк на вчора) → new → links (граф, broken 3) → orphans/stale — OK
 ```
+
+## 2026-11-05 (продовження) — M7: EPUB-експорт з metadata scrubber (scrub.rs)
+
+### Що зроблено
+- **scrub.rs** — EPUB 3 з `manuscript/*.md` (порядок як у release.rs: ведучі
+  цифри імені файла, інакше сорт за шляхом) — потреба №15 дослідження
+  (pen name management, витік реального імені в метадані самвидаву):
+  - ZIP власним записувачем, методом STORED (compression method 0 — валідний
+    EPUB; std-only: власний CRC-32, local/central headers, EOCD);
+    `mimetype` — ПЕРШИМ записом, без extra-поля; далі META-INF/container.xml,
+    OEBPS/content.opf, OEBPS/nav.xhtml (EPUB3 toc), глава = окремий XHTML
+    (ch1.xhtml…). markdown→HTML: параграфи, `---`→`<hr/>`, `#`/`##`/`###`,
+    інлайн — **реюз публічного `crosspost::inline_html`** (escape+bold+italic);
+    `&<>` екрануються завжди; frontmatter у XHTML не потрапляє.
+  - метадані: dc:title = frontmatter title першої глави → перший `# ` заголовок
+    → ім'я файла; dc:language = frontmatter `lang` → settings `language` → uk;
+    dc:identifier = детермінований UUID (v5-подібний з sha256 вмісту) —
+    дві збірки → байт-в-байт той самий файл; dc:date = дата публікації
+    користувача (`--date` → frontmatter `pub_date` → сьогодні).
+  - **Scrub full (за замовчуванням)**: dc:creator = тільки pen name
+    (`--pen` → frontmatter `pen_name` → settings `pen_name` → «Автор»),
+    dc:publisher геть, у dc:description реальні імена замінюються pen name'ом,
+    meta generator прибраний з кожного XHTML, реальне ім'я з frontmatter
+    (`author`/`автор`) замінюється pen name'ом І В ТІЛІ глав (copyright-рядок
+    теж витікав би), email/url/www з frontmatter не потрапляють у EPUB.
+  - **Scrub light (`--light`)**: звичайні метадані лишаються (реальний автор,
+    publisher, generator meta).
+  - **Scrub-звіт**: чесний список замін/видалень («dc:creator: Володимир
+    Вялков → Ash Thornwood», «dc:publisher: Самвидав+ → _rm», «generator: _rm
+    (… з N XHTML)», «тіло глав: … → … (N замін)»); зберігається в
+    `.skri/scrub-report.json` (останній звіт) + таблиця `epub_exports
+    (doc_paths_json, pen_name, scrub_mode, created_at, sha256)`.
+- **CLI**: `skri scrub build <папка> <вихід.epub> [--pen «Ash Thornwood»]
+  [--light] [--date YYYY-MM-DD]`, `skri scrub report <папка>`.
+
+### Знайдені тестами (і виправлені)
+1. Тест EOCD зчитував лічильник записів зі зміщенням сигнатури (n-20 замість
+   n-14) — «entries 1541»; офсети EOCD виправлені.
+
+### Тести
+7 acceptance m7_scrub: структура EPUB (mimetype перший/STORED/без extra,
+container, opf, nav), XHTML-екранування &<> + frontmatter не витікає,
+full: dc:creator = pen name і реальне ім'я відсутнє В ЦІЛОМУ файлі (байти),
+generator _rm у full / наявний у light (+ реальний автор у light-opf),
+звіт перелічує всі заміни і збігається з last_report, sha256 детермінований
++ запис у epub_exports, light-звіт без _rm + валідація дати.
+```
+cargo test --workspace → 118 passed, 0 failed (37 unit, вкл. 5 нових чистих
+  scrub.rs: crc32/uuid/escape/zip-layout/markdown; + 7 m7_scrub; + 2 skri-tauri)
+CLI вручну: scrub build (2 глави, full: 5 замін у звіті) → scrub report — OK
+EPUB перевірено СТОРОННІМ валідатором (python zipfile+ElementTree):
+  testzip чистий, mimetype перший STORED, opf/container/nav XML-валідні,
+  creator = Ash Thornwood, publisher відсутній, generator немає,
+  реального імені немає в жодному байті файлу
+```
