@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Writer Studio — вибір моделі по суті задачі (мокап UI)</title>
+<style>
+  :root { --bg:#fafafa; --card:#fff; --line:#e5e5e5; --ink:#1a1a1a; --mut:#6b7280; --acc:#4f46e5; }
+  * { box-sizing:border-box; margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  body { background:var(--bg); color:var(--ink); padding:32px; max-width:860px; }
+  h1 { font-size:20px; margin-bottom:4px; }
+  .sub { color:var(--mut); font-size:13px; margin-bottom:24px; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:24px; }
+  button.task { text-align:left; padding:14px; border:1px solid var(--line); border-radius:10px;
+    background:var(--card); cursor:pointer; }
+  button.task.active { border-color:var(--acc); box-shadow:0 0 0 2px rgba(79,70,229,.15); }
+  button.task .t { font-weight:600; font-size:14px; display:block; margin-bottom:4px; }
+  button.task .h { color:var(--mut); font-size:12px; }
+  .opts { border:1px solid var(--line); border-radius:10px; background:var(--card); padding:16px; }
+  .opts h2 { font-size:15px; margin-bottom:2px; }
+  .opts .hint { color:var(--mut); font-size:12px; margin-bottom:12px; }
+  label.opt { display:flex; gap:10px; padding:10px; border-radius:8px; cursor:pointer; align-items:flex-start; }
+  label.opt:hover { background:#f5f5ff; }
+  label.opt input { margin-top:3px; accent-color:var(--acc); }
+  .opt .l { font-size:14px; font-weight:500; }
+  .opt .n { font-size:12px; color:var(--mut); }
+  .badge { font-size:11px; padding:1px 7px; border-radius:99px; margin-left:6px; vertical-align:1px; }
+  .b-auto { background:#eef2ff; color:var(--acc); }
+  .b-cloud { background:#fef3c7; color:#92400e; }
+  .b-local { background:#ecfdf5; color:#065f46; }
+  .json { margin-top:16px; background:#111827; color:#d1fae5; border-radius:8px;
+    padding:12px; font:12px/1.5 ui-monospace,Consolas,monospace; white-space:pre; overflow-x:auto; }
+  .note { color:var(--mut); font-size:12px; margin-top:14px; }
+</style>
+</head>
+<body>
+  <h1>Вибір моделі — по суті задачі</h1>
+  <div class="sub">Мокап екрану Tauri (M2). Каталог живиться з <code>skri model tasks</code> /
+    <code>models::catalog_json()</code>. Автовибір рекомендований і завжди локальний; хмара — лише вручну.</div>
+
+  <div class="grid" id="tasks"></div>
+
+  <div class="opts" id="panel">
+    <h2>Оберіть задачу</h2>
+    <div class="hint">Натисніть кнопку задачі зверху — покажемо моделі.</div>
+  </div>
+
+  <div class="json" id="out">— виберіть задачу і модель —</div>
+  <div class="note">Вибір зберігається в <code>.skri/settings.json</code> → розділ «models».
+    Ті самі дані доступні з CLI: <code>skri model menu|auto|set|status</code>.</div>
+
+<script>
+const CATALOG = [
+  { id:"generate-uk", label:"Генерація тексту українською", hint:"чернетки сцен, продовження, стилізація",
+    options:[
+      { id:"lapa-v0.1.2", label:"Lapa LLM v0.1.2 (Ollama, Gemma3 12B)", note:"найкраща відкрита укр. модель; <7B ламає орфографію", local:true },
+      { id:"llama-3.1-8b", label:"Llama 3.1 8B Instruct", note:"загальна; укр. слабша за Lapa", local:true },
+      { id:"byok-cloud", label:"Хмара (свій API-ключ)", note:"опційно, ніколи не авто", local:false } ] },
+  { id:"translate", label:"Переклад прози", hint:"укр↔en; глосарій серії примусово",
+    options:[
+      { id:"nllb-200", label:"NLLB-200", note:"baseline укр. MT; T-V ти/ви — окремий прохід", local:true },
+      { id:"lapa-v0.1.2", label:"Lapa LLM — стильовий переклад", note:"глосарій у промпті, художній ритм", local:true },
+      { id:"byok-cloud", label:"Хмара (свій API-ключ)", note:"опційно", local:false } ] },
+  { id:"transcribe-uk", label:"Транскрипція аудіо", hint:"інтерв'ю → текст, on-device",
+    options:[
+      { id:"whisper-large-v3-turbo-uk", label:"whisper large-v3-turbo (укр. fine-tune)", note:"WER 12.75%", local:true },
+      { id:"whisper-large-v3", label:"whisper large-v3", note:"укр/рос мікс плутає → мову вручну", local:true } ] },
+  { id:"grammar", label:"Граматика і стиль", hint:"spell/grammar, кілька мов одночасно",
+    options:[
+      { id:"languagetool-local", label:"LanguageTool server (локально)", note:"укр + 25+ мов, без хмари", local:true },
+      { id:"goroh-dictionary", label:"Goroh + dmklinger словник", note:"офлайн без сервера", local:true } ] },
+  { id:"summarize", label:"Рекапи і резюме", hint:"пам'ять серії, recap між книгами",
+    options:[
+      { id:"lapa-v0.1.2", label:"Lapa LLM — резюме з індексу", note:"вхід — агрегат Index Engine", local:true },
+      { id:"llama-3.1-8b", label:"Llama 3.1 8B", note:"якщо Lapa не встановлена", local:true } ] },
+  { id:"semantic-search", label:"Семантичний пошук", hint:"кластеризація описів, схожі сцени",
+    options:[
+      { id:"rules-plus-fts", label:"Правила + FTS5", note:"детерміновано; укр. embedding поки слабкі", local:true },
+      { id:"multilingual-e5", label:"multilingual-e5 (експеримент)", note:"коли з'явиться сильніша укр. модель", local:true } ] }
+];
+
+let current = null;
+const tasksEl = document.getElementById("tasks");
+const panelEl = document.getElementById("panel");
+const outEl = document.getElementById("out");
+
+CATALOG.forEach((t, i) => {
+  const b = document.createElement("button");
+  b.className = "task";
+  b.innerHTML = `<span class="t">${t.label}</span><span class="h">${t.hint}</span>`;
+  b.onclick = () => select(i);
+  t._btn = b;
+  tasksEl.appendChild(b);
+});
+
+function select(i) {
+  current = CATALOG[i];
+  CATALOG.forEach(t => t._btn.classList.remove("active"));
+  current._btn.classList.add("active");
+  panelEl.innerHTML = `<h2>${current.label}</h2><div class="hint">${current.hint}</div>` +
+    current.options.map((o, j) => `
+      <label class="opt">
+        <input type="radio" name="m" ${j===0?"checked":""} onchange="apply()">
+        <span><span class="l">${o.label}</span>
+        <span class="badge ${o.local ? "b-local" : "b-cloud"}">${o.local ? "локальна" : "хмара (BYOK)"}</span>
+        ${j===0 ? '<span class="badge b-auto">автоматично</span>' : ""}
+        <div class="n">${o.note}</div></span>
+      </label>`).join("");
+  apply();
+}
+
+function apply() {
+  const checked = panelEl.querySelector("input:checked");
+  const idx = [...panelEl.querySelectorAll("input")].indexOf(checked);
+  const auto = idx === 0;
+  const model = current.options[idx].id;
+  outEl.textContent = JSON.stringify({ models: { [current.id]: { model, auto, set_at: 1762348800 } } }, null, 2);
+}
+</script>
+</body>
+</html>
