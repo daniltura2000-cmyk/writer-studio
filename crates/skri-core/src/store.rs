@@ -194,7 +194,9 @@ impl ProjectStore {
     }
 
     /// Повна реіндексація документів з диска (плюс FTS).
-    /// Ідемпотентна: перечитує лише файли з новим mtime.
+    /// Ідемпотентна: перечитує лише файли з новим mtime; рядки docs для
+    /// ВИДАЛЕНИХ файлів зникають (індекс = відображення файлів, залізне
+    /// правило №1 — згадки каскадно видаляються разом з doc-рядком).
     pub fn reindex(&self) -> Result<IndexStats> {
         let mut stats = IndexStats::default();
         for entry in walkdir::WalkDir::new(&self.root)
@@ -257,6 +259,23 @@ impl ProjectStore {
                     .execute("INSERT INTO docs(path, kind) VALUES (?1, ?2)", params![rel, kind.as_str()])?;
                 let id = self.conn.last_insert_rowid();
                 self.index_file(id, path, &rel, kind, mtime, &mut stats)?;
+            }
+        }
+        // видалені файли: рядки docs (і їхні FTS-рядки) зникають
+        let stale: Vec<String> = {
+            let mut stmt = self.conn.prepare("SELECT path FROM docs")?;
+            let rows = stmt
+                .query_map([], |r| r.get::<_, String>(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+            rows
+        };
+        for p in stale {
+            if !self.root.join(&p).exists() {
+                self.conn
+                    .execute("DELETE FROM docs WHERE path = ?1", params![p])?;
+                self.conn
+                    .execute("DELETE FROM docs_fts WHERE path = ?1", params![p])?;
             }
         }
         Ok(stats)

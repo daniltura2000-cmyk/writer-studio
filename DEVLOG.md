@@ -215,3 +215,127 @@ cargo test → 54 passed (21 unit + 11 M0/M1 + 8 M2 + 6 M3 + 4 inkbridge + 4 m5_
 CLI вручну: stats sheet (кумулятив по главах), stats diff (ретроактивна правка
 hp 100→200: «глава 1: 100 → 200; глава 2: -30 → 70», повторний прогін чистий), stats radar — OK
 ```
+
+## 2026-11-05 (продовження) — M4: Recap Generator (recap.rs)
+
+### Що зроблено
+- **recap.rs** — рекап по book-boundary з Index Engine (специфікація §5.6):
+  - rules-first (детерміновано, без AI): топ-сутності по частотності згадок
+    у діапазоні, «нові персонажі» = сутності, чия ПЕРША згадка в усьому
+    рукописі потрапляє в діапазон, кількість глав/слів; вивід —
+    markdown-список у файл `recap-<від>-<до>.md` у папці проєкту.
+  - Глава = порядок `manuscript/*.md` (сорт за іменем файлу), номер 1-based.
+  - AI-рекап через ЛОКАЛЬНУ Ollama: модель задачі `summarize` з Model Router
+    (авто = lapa-v0.1.2); промпт = rules-дані + текст діапазону (ОСТАННІ
+    3 глави, хвіст до 12000 символів на главу, зріз по char boundaries —
+    кирилиця). `build_prompt` публічна і чиста — будується без виклику моделі.
+  - Ollama недоступна/порожня відповідь → чесне повідомлення і fallback на
+    rules-only; файл рекапу зберігається в будь-якому разі (не падає).
+  - `translate::ollama_generate` тепер `pub(crate)` — публічний API не змінено.
+- **CLI**: `skri recap <папка> <від-глави> <до-глави> [--ai]`
+  (сам робить reindex + scan_project перед рекапом).
+
+### Попутні виправлення (спільні файли)
+- store.rs `reindex()`: рядки docs для ВИДАЛЕНИХ файлів тепер зникають
+  (разом з FTS і каскадом згадок) — індекс = відображення файлів (залізне
+  правило №1); ловилося тестом m4_release.
+- release.rs / m4_release.rs: дрібні синтаксичні/типові фікси (E0597 у
+  query_map-блоках, зайва дужка, Option/i64 mismatch) — код того ж дня.
+
+### Прогін
+```
+cargo test → 78 passed, 0 failed (28 unit + acceptance M0–M5, вкл. 6 нових m4_recap)
+CLI вручну: skri recap demo 1 2 → recap-1-2.md (rules-only, числа/сутності коректні);
+skri recap demo 1 2 --ai без Ollama → «⚠ Ollama недоступна…» + rules-only файл, exit 0
+```
+
+## 2026-11-05 (продовження) — M4: Release Planner (Kanban глав + прогноз буфера)
+
+### Що зроблено
+- **release.rs** — серійний командний центр (§5.6, частина 1):
+  - реєстр глав: auto-scan manuscript/*.md → `chapters_registry(doc_path, order,
+    pub_status, pub_date, platforms_json)`. **Статус живе у frontmatter глави
+    (`pub_status:`)** — файли лишаються єдиним джерелом правди (залізне правило №1),
+    таблиця — похідний індекс; порядок = ведучі цифри імені файла, інакше позиція
+    серед docs; `pub_date: YYYY-MM-DD` → epoch-секунди UTC, `pub_platforms:` → JSON.
+  - Kanban-звіт: колонки draft → edit → buffer → scheduled → published (+ будь-які
+    нестандартні статуси окремими колонками) + журнал переходів `chapters_log`
+    (зміна статусу між прогонами пишеться автоматично, повторний прогін без правок
+    алертів/записів не плодить — ідемпотентність).
+  - `release::set_status` — статус/дата/платформи пишуться ПРЯМО у frontmatter
+    файлу (хірургічно: решта header-блоку і тіло не чіпаються; файл без
+    frontmatter отримує новий блок).
+  - Прогноз буфера: фактична швидкість = слів/день з mtime-дельт (rate кожної
+    глави = слів/днів від попередньої за mtime; ковзне середнє по останніх N
+    главах, `--window`); буфер = глави buffer/scheduled; «запас вичерпається
+    через X днів» = слів буфера / слів-на-день; «закінчиться Y-го числа» — дата
+    YYYY-MM-DD (стеля, консервативно). Чиста функція `forecast_with(history,
+    buffer, now, window)` — тестована без файлів.
+- **Std-only дати**: epoch-арифметика днів від епохи (civil_from_days /
+  days_from_civil, Howard Hinnant) — chrono НЕ додавався; `fmt_date`/`parse_ymd`
+  публічні (стануть кнопками Tauri UI).
+- **CLI**: `skri release kanban <папка>`, `skri release forecast <папка>
+  [--window 7]`, `skri release set <папка> <док.md> <статус> [YYYY-MM-DD] [платформи]`.
+
+### Знайдені тестами (і виправлені)
+1. reindex не чистить docs від зниклих файлів → rebuild впав на read_to_string
+   зниклої глави → rebuild пропускає неіснуючі шляхи, рядок зникає зі реєстру
+   через stale-чистку (правило «індекс похідний» дотримане і тут).
+
+### Прогін
+```
+cargo test → усі зелені (28 unit + 11 acceptance + 8 M2 + 6 M3 + 4 inkbridge +
+6 m5_stats + 5 m4_release + 4 m3_inkbridge + інші модулі паралельних агентів), 0 failed
+CLI вручну: release kanban (3 глави у 3 колонках, дати/платформи), release
+forecast --window 5 (5 слів/день, буфер 2 глави, «через ~3.3 дні — 2026-11-09»),
+release set (pub_status записано у frontmatter, file = джерело правди) — OK
+```
+
+## 2026-11-05 (продовження) — M4: Crosspost Orchestrator + роялті-дашборд
+
+### Що зроблено
+- **crosspost.rs** — пакувальник + журнал публікацій (§5.6):
+  - канонічний markdown глави → пакунки для 5 платформ (royalroad/
+    scribblehub/wattpad/ao3/patreon): `.skri/outbound/<глава>/<платформа>/`
+    з `package.json` {platform, title, html_body, notes, tags_json} і
+    готовим до копіювання `chapter.html`; tags/notes — з frontmatter;
+  - простий markdown→html (std-only): параграфи, `---`→`<hr>`,
+    `**bold**`→`<strong>`, `*italic*`→`<em>`, escape HTML;
+  - журнал `crosspost_log(doc_path, platform, version_hash, status
+    pending|posted|failed, packed_at, published_at)`; статус оновлюється
+    ВРУЧНУ `skri crosspost mark <папка> <док> <платформа> posted`;
+  - **чесно задокументовано**: у платформ немає відкритих API для постингу
+    вебновел (AO3 закритий, RR/SH/Wattpad — лише скрейпери з ризиком бану,
+    Patreon — OAuth) → реальна відправка ручна; майбутні адаптери з OAuth
+    перевикористають той самий журнал і формат пакунків;
+  - правка канону після posted: sha256 тіла ≠ version_hash → алерт
+    `kind='crosspost-stale'` («главу змінено після публікації на X — потрібна
+    перевідправка»), ідемпотентно (1 відкритий алерт на пару док×платформа);
+    повторний `mark ... posted` фіксує хеш поточної версії і розв'язує алерт.
+- **royalty.rs** — роялті-дашборд з локальних CSV:
+  - гнучкий CSV-парсер (лапки, `""`, CRLF): колонки розпізнаються за
+    заголовками-синонімами (title/book/product, date/order date/period,
+    marketplace/platform/channel, royalty/earnings/revenue, units/quantity);
+    невідомі колонки ігноруються, рядки без суми пропускаються;
+  - суми: `$1,234.56`, `1.234,56`, валютні коди → центи; тисячні vs
+    десяткові коми розрізняються за патерном груп по 3;
+  - таблиця `royalty_rows(source_file, date, platform, book, units,
+    revenue_cents)`; імпорт ідемпотентний (перезапис рядків свого файла);
+  - агрегати по платформах / книгах / місяцях (нормалізація дат ISO,
+    M/D/YYYY, D.M.Y, «January 2026»).
+- **CLI**: `skri crosspost pack|status|mark`, `skri royalty import|summary
+  [--by platform|book|month]`; status заодно виконує stale-перевірку.
+
+### Знайдені тестами (і виправлені)
+1. Повторний `mark posted` після правки перезаписував СТАРИЙ запакований
+   хеш → stale-алерт не гаснув. Виправлено: posted фіксує хеш ПОТОЧНОГО
+   канону (перевідправлена версія).
+2. `By::label` був приватним → CLI не компілився (E0624).
+
+### Прогін
+```
+cargo test → 78 passed, 0 failed (28 unit + acceptance, у т.ч. 6 нових m4_crosspost)
+CLI вручну: crosspost pack (5 пакунків, версія d186cbdb), mark wattpad posted,
+status (таблиця журналу), правка глави → stale «d186cbdb → c9eb5668»,
+royalty import ($1,234.56 → 123456 центів) + summary --by month — OK
+```

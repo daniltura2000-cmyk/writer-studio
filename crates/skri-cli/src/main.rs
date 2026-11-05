@@ -45,7 +45,16 @@ fn usage() {
          \x20 skri stats diff <папка>                             діф снапшотів після ретроактивної правки\n\
          \x20 skri stats radar <папка>                            stat-error radar (від'ємні hp/mp)\n\
          \x20 skri ink import <папка> <файл.ink|.yarn>             round-trip імпорт діалогу → dialogue/*.md\\n\\
-         \x20 skri ink export <папка> <док.md> <файл.ink|.yarn>     експорт markdown → Ink/Yarn\\n\\
+         \x20 skri ink export <папка> <док.md> <файл.ink|.yarn>     експорт markdown → Ink/Yarn\\\\n\\\\
+         \x20 skri recap <папка> <від-глави> <до-глави> [--ai]       рекап діапазону глав (rules-first; --ai = локальна Ollama)\\n\\\\
+         \x20 skri crosspost pack <папка> <док.md>               пакунки для 5 платформ (.skri/outbound/)\\n\\
+         \x20 skri crosspost status <папка> [док.md]              журнал публікацій + stale-перевірка\n\
+         \x20 skri crosspost mark <папка> <док> <платформа> posted|failed\n\
+         \x20 skri royalty import <папка> <файл.csv>              імпорт CSV KDP/D2D/Patreon\n\
+         \x20 skri royalty summary <папка> [--by platform|book|month]\n\
+         \x20 skri release kanban <папка>                        Kanban глав по статусах + переходи\n\
+         \x20 skri release forecast <папка> [--window 7]           прогноз вичерпання буфера (слів/день)\n\
+         \x20 skri release set <папка> <док.md> <статус> [YYYY-MM-DD] [платформи,...]  статус у frontmatter\n\
          \x20 skri preset compose <назва> <kind:preset...>         зібрати свій пресет з ассетів"
     );
 }
@@ -69,6 +78,10 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "episode" => cmd_episode(&args[1..])?,
         "stats" => cmd_stats(&args[1..])?,
         "ink" => cmd_ink(&args[1..])?,
+        "crosspost" => cmd_crosspost(&args[1..])?,
+        "royalty" => cmd_royalty(&args[1..])?,
+        "release" => cmd_release(&args[1..])?,
+        "recap" => cmd_recap(args)?,
         _ => usage(),
     }
     Ok(())
@@ -748,4 +761,251 @@ fn cmd_ink(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             exit(2);
         }
     }
+}
+
+fn cmd_crosspost(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use skri_core::crosspost;
+    match rest.first().map(String::as_str) {
+        Some("pack") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("crosspost pack: вкажіть папку"));
+            let doc = rest.get(2).cloned().unwrap_or_else(|| usage_exit("crosspost pack: вкажіть документ .md"));
+            let store = open_at(dir);
+            let rep = crosspost::pack(&store, &doc)?;
+            println!(
+                "✔ {} → .skri/outbound/{}/ (версія {})",
+                rep.doc_path,
+                rep.chapter,
+                &rep.version_hash[..8.min(rep.version_hash.len())]
+            );
+            println!("  пакунки: {} платформ ({}; package.json + chapter.html)", rep.platforms.len(), rep.platforms.join(", "));
+            if !rep.skipped_posted.is_empty() {
+                println!("  ⚠ пропущено (posted): {} — спершу перевідправте або перевірте stale", rep.skipped_posted.join(", "));
+            }
+            Ok(())
+        }
+        Some("status") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("crosspost status: вкажіть папку"));
+            let doc = rest.get(2).map(String::as_str);
+            let store = open_at(dir);
+            let stale = crosspost::check_stale(&store)?;
+            let rows = crosspost::log_rows(&store, doc)?;
+            if rows.is_empty() {
+                println!("журнал порожній — спершу `skri crosspost pack`");
+                return Ok(());
+            }
+            println!("{:<28} {:<12} {:<8} {}", "документ", "платформа", "статус", "версія/час");
+            for r in &rows {
+                let extra = match r.status.as_str() {
+                    "posted" => format!("опубл. {}", r.published_at.unwrap_or(0)),
+                    "pending" => format!("запак. {}", r.packed_at.unwrap_or(0)),
+                    _ => "—".to_string(),
+                };
+                println!(
+                    "{:<28} {:<12} {:<8} {} ({})",
+                    r.doc_path,
+                    r.platform,
+                    r.status,
+                    &r.version_hash[..8.min(r.version_hash.len())],
+                    extra
+                );
+            }
+            if !stale.stale.is_empty() {
+                println!("\n⚠ застарілі публікації (канон змінено після posted):");
+                for (doc, platform, old, new) in &stale.stale {
+                    println!("  • {doc} @ {platform}: {} → {} (алерт crosspost-stale)", &old[..8], &new[..8]);
+                }
+            }
+            Ok(())
+        }
+        Some("mark") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("crosspost mark: вкажіть папку"));
+            let doc = rest.get(2).cloned().unwrap_or_else(|| usage_exit("crosspost mark: вкажіть документ"));
+            let platform = rest.get(3).cloned().unwrap_or_else(|| usage_exit("crosspost mark: вкажіть платформу"));
+            let status = rest.get(4).map(String::as_str).unwrap_or_else(|| usage_exit("crosspost mark: вкажіть статус posted|failed|pending"));
+            let store = open_at(dir);
+            let row = crosspost::mark(&store, &doc, &platform, status)?;
+            println!("✔ {} @ {} → {}", row.doc_path, row.platform, row.status);
+            if status == "posted" {
+                println!("  зафіксована версія {} (published_at = {})", &row.version_hash[..8], row.published_at.unwrap_or(0));
+            }
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда crosspost: {:?} (pack|status|mark)", other);
+            exit(2);
+        }
+    }
+}
+
+fn cmd_royalty(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use skri_core::royalty;
+    match rest.first().map(String::as_str) {
+        Some("import") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("royalty import: вкажіть папку"));
+            let file = rest.get(2).cloned().unwrap_or_else(|| usage_exit("royalty import: вкажіть файл .csv"));
+            let store = open_at(dir);
+            let rep = royalty::import_csv(&store, std::path::Path::new(&file))?;
+            println!("✔ {}: {} рядків, пропущено {}", rep.source_file, rep.rows, rep.skipped);
+            for (header, field) in &rep.mapping {
+                println!("  «{header}» → {field}");
+            }
+            Ok(())
+        }
+        Some("summary") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("royalty summary: вкажіть папку"));
+            let by_s = flag(rest, "--by").unwrap_or_else(|| "platform".into());
+            let by = royalty::By::parse(&by_s)?;
+            let store = open_at(dir);
+            let (aggs, total_units, total_cents) = royalty::summary(&store, by)?;
+            if aggs.is_empty() {
+                println!("даних немає — спершу `skri royalty import`");
+                return Ok(());
+            }
+            println!("Роялті по {} (разом: {} одиниць, {}):", by.label(), total_units, royalty::fmt_money(total_cents));
+            for a in &aggs {
+                println!("  {:<32} {:>6} од.  {:>12}", a.key, a.units, royalty::fmt_money(a.revenue_cents));
+            }
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда royalty: {:?} (import|summary)", other);
+            exit(2);
+        }
+    }
+}
+
+fn cmd_release(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use skri_core::release;
+    match rest.first().map(String::as_str) {
+        Some("kanban") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("release kanban: вкажіть папку"));
+            let store = open_at(dir);
+            store.reindex()?;
+            let rep = release::kanban(&store)?;
+            let mut total = 0usize;
+            for (status, chapters) in &rep.columns {
+                if chapters.is_empty() {
+                    continue;
+                }
+                total += chapters.len();
+                println!("\n● {status} ({})", chapters.len());
+                for c in chapters {
+                    let date = c.pub_date.map(release::fmt_date).unwrap_or_else(|| "—".into());
+                    let plat = if c.platforms.is_empty() {
+                        String::new()
+                    } else {
+                        format!("  [{}]", c.platforms.join(", "))
+                    };
+                    println!("  {:>3}. {} — {} слів, дата {date}{plat}", c.order, c.title, c.word_count);
+                }
+            }
+            if total == 0 {
+                println!("(рукопис порожній — глав у manuscript/ немає)");
+                return Ok(());
+            }
+            if rep.transitions.is_empty() {
+                println!("\n✔ переходів статусу ще не було");
+            } else {
+                println!("\nПереходи (останні {}):", rep.transitions.len());
+                for t in &rep.transitions {
+                    let from = t.from.clone().unwrap_or_else(|| "—".into());
+                    println!("  {} {}: {} → {}", release::fmt_date(t.at), t.doc_path, from, t.to);
+                }
+            }
+            Ok(())
+        }
+        Some("forecast") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("release forecast: вкажіть папку"));
+            let window: usize = flag(rest, "--window").and_then(|w| w.parse().ok()).unwrap_or(7);
+            let store = open_at(dir);
+            store.reindex()?;
+            let f = release::forecast(&store, window)?;
+            if f.samples == 0 {
+                println!("✖ недостатньо історії: потрібно ≥2 глави manuscript/ з різними mtime і словами");
+                return Ok(());
+            }
+            println!(
+                "Швидкість (ковзне середнє по останніх {} главах): {:.0} слів/день (точок: {})",
+                f.window, f.words_per_day, f.samples
+            );
+            if f.buffer_chapters == 0 {
+                println!("⚠ буфер порожній (0 глав у buffer/scheduled) — пиши наперед!");
+                return Ok(());
+            }
+            println!(
+                "Буфер: {} {} ({} слів; {} днів на главу)",
+                f.buffer_chapters,
+                if f.buffer_chapters == 1 { "глава" } else { "глави" },
+                f.buffer_words,
+                format!("{:.1}", f.days_per_chapter)
+            );
+            if let (Some(days), Some(date)) = (f.days_left, f.exhaustion_date.clone()) {
+                println!(
+                    "Запас вичерпається через ~{:.1} {} — {} (UTC)",
+                    days,
+                    if (days - 1.0).abs() < 0.05 { "день" } else { "днів" },
+                    date
+                );
+            }
+            Ok(())
+        }
+        Some("set") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("release set: вкажіть папку"));
+            let doc = rest.get(2).cloned().unwrap_or_else(|| usage_exit("release set: вкажіть документ .md"));
+            let status = rest.get(3).cloned().unwrap_or_else(|| usage_exit("release set: вкажіть статус (draft|edit|buffer|scheduled|published)"));
+            let date = rest.get(4).map(String::as_str);
+            let platforms: Vec<String> = rest
+                .get(5)
+                .map(|s| s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect())
+                .unwrap_or_default();
+            let store = open_at(dir);
+            release::set_status(&store, &doc, &status, date, &platforms)?;
+            store.reindex()?;
+            release::rebuild(&store)?;
+            println!("✔ {doc}: pub_status = {status} (у frontmatter файлу)");
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда release: {:?} (kanban|forecast|set)", other);
+            exit(2);
+        }
+    }
+}
+
+// --- M4: Recap Generator (специфікація §5.6) ---
+
+use skri_core::recap;
+
+fn cmd_recap(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let _dir = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| usage_exit("recap: вкажіть папку проєкту"));
+    let from: usize = args
+        .get(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or_else(|| usage_exit("recap: вкажіть від-главу"));
+    let to: usize = args
+        .get(3)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or_else(|| usage_exit("recap: вкажіть до-главу"));
+    let use_ai = args.iter().any(|a| a == "--ai");
+    let store = open_project(args);
+    store.reindex()?;
+    indexer::scan_project(&store)?;
+    let rep = if use_ai {
+        let r = recap::generate_ai(&store, from, to, None)?;
+        if let Some(note) = &r.note {
+            println!("{note}");
+        }
+        r
+    } else {
+        recap::write_rules(&store, from, to)?
+    };
+    println!(
+        "✔ рекап [{}] → {}",
+        if rep.used_ai { "AI" } else { "rules-only" },
+        rep.path.display()
+    );
+    Ok(())
 }

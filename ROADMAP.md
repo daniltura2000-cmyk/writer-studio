@@ -55,7 +55,7 @@
 - [ ] Side-by-side переклад UI
 
 ## M4 — Серійний командний центр
-- [ ] Kanban глав + прогноз вичерпання буфера (слів/день)
+- [x] Kanban глав + прогноз вичерпання буфера (слів/день)
 - [ ] Crosspost Orchestrator (RoyalRoad, ScribbleHub, Wattpad, AO3, Patreon API v2)
 - [ ] Recap Generator з Index Engine
 - [ ] Роялті-дашборд (локальний імпорт CSV KDP/D2D/Patreon)

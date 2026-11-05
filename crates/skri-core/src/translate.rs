@@ -195,7 +195,8 @@ pub fn run_mt(
 }
 
 /// Мінімальний HTTP-клієнт Ollama (localhost:11434 /api/generate), std-only.
-fn ollama_generate(model: &str, prompt: &str) -> Result<String> {
+/// pub(crate): використовується також Recap Generator'ом (recap.rs).
+pub(crate) fn ollama_generate(model: &str, prompt: &str) -> Result<String> {
     let payload = serde_json::json!({
         "model": model,
         "prompt": prompt,

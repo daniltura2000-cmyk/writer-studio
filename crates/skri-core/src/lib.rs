@@ -9,6 +9,7 @@
 
 pub mod animation;
 pub mod bible;
+pub mod crosspost;
 pub mod drift;
 pub mod frontmatter;
 pub mod glossary;
@@ -18,6 +19,9 @@ pub mod loc;
 pub mod models;
 pub mod narrative;
 pub mod presets;
+pub mod recap;
+pub mod release;
+pub mod royalty;
 pub mod stats;
 pub mod store;
 pub mod translate;
