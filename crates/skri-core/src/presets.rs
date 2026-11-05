@@ -96,6 +96,8 @@ impl PresetManifest {
 pub const BUILTIN: &[(&str, &str)] = &[
     ("novelist-uk", include_str!("../../../presets/novelist-uk.json")),
     ("note-taker-uk", include_str!("../../../presets/note-taker-uk.json")),
+    ("game-narrative-uk", include_str!("../../../presets/game-narrative-uk.json")),
+    ("animation-uk", include_str!("../../../presets/animation-uk.json")),
 ];
 
 /// Завантажити вбудований пресет за назвою.

@@ -142,6 +142,22 @@ CREATE TABLE IF NOT EXISTS trans_segments (
   target_lang TEXT NOT NULL,
   UNIQUE(doc_path, para_idx, target_lang)
 );
+CREATE TABLE IF NOT EXISTS barks (
+  id INTEGER PRIMARY KEY,
+  trigger TEXT NOT NULL,
+  conditions TEXT NOT NULL DEFAULT '{}',
+  priority INTEGER NOT NULL DEFAULT 0,
+  cooldown INTEGER NOT NULL DEFAULT 0,
+  variants TEXT NOT NULL DEFAULT '[]',
+  entity_id INTEGER
+);
+CREATE TABLE IF NOT EXISTS var_ops (
+  id INTEGER PRIMARY KEY,
+  var_name TEXT NOT NULL,
+  op TEXT NOT NULL,
+  doc_path TEXT NOT NULL,
+  char_start INTEGER NOT NULL DEFAULT 0
+);
 "#;
 
 impl ProjectStore {

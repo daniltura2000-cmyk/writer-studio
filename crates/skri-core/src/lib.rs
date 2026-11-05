@@ -7,18 +7,37 @@
 //! - [`bible`]   — живий Story Bible: картки сутностей, assertions, конфлікти
 //! - [`presets`] — композабельні пресети жанрів (JSON-маніфести)
 
+pub mod animation;
 pub mod bible;
 pub mod drift;
 pub mod frontmatter;
 pub mod glossary;
 pub mod indexer;
+pub mod inkbridge;
 pub mod loc;
 pub mod models;
+pub mod narrative;
 pub mod presets;
+pub mod stats;
 pub mod store;
 pub mod translate;
 
 pub use store::{Alert, EntityCard, IndexStats, ProjectStore};
+
+/// Спільні хелпери для acceptance-тестів (інтеграційні тести імпортують
+/// `skri_core::tests_common`; це публічний API для тестів, не для продакшну).
+pub mod tests_common {
+    use crate::ProjectStore;
+    use std::path::PathBuf;
+
+    /// Тимчасовий проєкт із валідним пресетом.
+    pub fn tmp_project(name: &str) -> (PathBuf, ProjectStore) {
+        let root = std::env::temp_dir().join(format!("skri-cmn-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let store = ProjectStore::init(&root, "novelist-uk", "uk").expect("init");
+        (root, store)
+    }
+}
 
 /// Тип помилки ядра.
 #[derive(Debug)]

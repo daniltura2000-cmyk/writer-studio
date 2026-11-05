@@ -26,19 +26,33 @@
 - [x] Кнопкове перевизначення: CLI-меню + `set_model`/`model_for` у settings.json
 - [x] `catalog_json()` — те саме джерело для кнопок Tauri UI (M2); мокап `docs/ui/model-picker.html`
 
-## M2 — Пресети повні + мультимовність
-- [ ] Композабельні ассети в UI: структури / чеклісти / валідатори / шаблони / AI-рецепти
+## M2 — Пресети повні + мультимовність (ядро ✅, UI ⬜)
 - [ ] LanguageTool server локально (grammar UA+multi)
-- [ ] Серійний глосарій (series_wide) + narrative memory
-- [ ] Side-by-side переклад: NLLB-200 / Lapa LLM, стани draft→mt→human→approved
-- [ ] T-V реєстр (ти/ви) checker
+- [x] Серійний глосарій (series_wide) + narrative memory
+- [x] Side-by-side переклад: NLLB-200 / Lapa LLM, стани draft→mt→human→approved
+- [x] T-V реєстр (ти/ви) checker
+- [x] Локалізаційні ліміти per-language (de ×1.30, uk ×1.15, CJK ×0.60) — алерт ДО публікації
+- [x] PO-експорт із msgctxt (контекст подорожує з рядком)
+- [x] preset compose: власний пресет з ассетів кількох джерел (kind:preset)
 
-## M3 — Гейм-наратив Studio
-- [ ] Text-first діалог (Ink/Yarn-сумісний синтаксис), граф як похідна візуалізація
-- [ ] Barks як першокласний об'єкт (тригер/умови/пріоритет/cooldown/варіанти) + CSV/JSON експорт
-- [ ] Auditor змінних: матриця set/check, мертві прапорці, недосяжні ноди
-- [ ] Round-trip імпорт/експорт .ink/.yarn/.po/.xlf
-- [ ] Локалізаційні ліміти символів per-language у редакторі (алерт ДО публікації)
+## M3 — Гейм-наратив Studio (ядро ✅, UI ⬜)
+- [x] Text-first діалог (Ink/Yarn-дружний синтаксис), граф як похідна візуалізація
+- [x] Barks як першокласний об'єкт (тригер/умови/пріоритет/cooldown/варіанти) + CSV експорт, дубль-детекція
+- [x] Auditor змінних: матриця set/check/unset, мертві прапорці, сироти
+- [x] Досяжність нод: недосяжні, dangling goto
+- [ ] Round-trip імпорт/експорт .ink/.yarn
+- [x] Локалізаційні ліміти per-language (дані в loc.rs, M2)
+
+## M3.5 — Animation Writer (ядро ✅, UI ⬜)
+- [x] Валідатор 20-хв епізоду: cold open + ≥2 narrative turns + hook, діалогові сцени підряд (red flag)
+- [x] Мют-тест: visual_ratio по сценах («сцена гасне без звуку»)
+- [x] Show Bible правила: `bible/rules.md` (правило :: ключові слова) → «retcon чи помилка?»
+- [ ] Side-by-side сторіборд-лист (Flashboards-стиль)
+
+## M2.5/M3.5 — Tauri UI (кнопкові пресети-напрямки)
+- [ ] Онбордінг-вибір напрямку з описом «якою буде кінцева програма»
+- [ ] Кнопковий каталог моделей (catalog_json), bark-таблиця, vars-матриця, episode-check дашборд
+- [ ] Side-by-side переклад UI
 
 ## M4 — Серійний командний центр
 - [ ] Kanban глав + прогноз вичерпання буфера (слів/день)

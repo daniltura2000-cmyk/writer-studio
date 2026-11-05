@@ -41,6 +41,11 @@ fn usage() {
          \x20 skri translate set <папка> <seg_id> <статус> <текст>  human/approved\n\
          \x20 skri limits <текст> <tgt1:N,tgt2:N...>               перевірка лімітів ДО публікації\n\
          \x20 skri tv <файл.md>                                    аналіз реєстру ти/ви\n\
+         \x20 skri stats sheet <папка> <глава>                    stat sheet: стан персонажів у гл. N\n\
+         \x20 skri stats diff <папка>                             діф снапшотів після ретроактивної правки\n\
+         \x20 skri stats radar <папка>                            stat-error radar (від'ємні hp/mp)\n\
+         \x20 skri ink import <папка> <файл.ink|.yarn>             round-trip імпорт діалогу → dialogue/*.md\\n\\
+         \x20 skri ink export <папка> <док.md> <файл.ink|.yarn>     експорт markdown → Ink/Yarn\\n\\
          \x20 skri preset compose <назва> <kind:preset...>         зібрати свій пресет з ассетів"
     );
 }
@@ -58,6 +63,12 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "translate" => cmd_translate(&args[1..])?,
         "limits" => cmd_limits(&args[1..])?,
         "tv" => cmd_tv(&args[1..])?,
+        "bark" => cmd_bark(&args[1..])?,
+        "vars" => cmd_vars(&args[1..])?,
+        "graph" => cmd_graph(&args[1..])?,
+        "episode" => cmd_episode(&args[1..])?,
+        "stats" => cmd_stats(&args[1..])?,
+        "ink" => cmd_ink(&args[1..])?,
         _ => usage(),
     }
     Ok(())
@@ -88,6 +99,31 @@ fn cmd_init(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     println!("✔ проєкт створено: {}", store.root.display());
     println!("  пресет: {preset}, мова: {lang}");
     println!("  покладіть глави у manuscript/, канон — у bible/, нотатки — у notes/");
+    print_directions(&store)?;
+    Ok(())
+}
+
+/// Огляд напрямків: «якою буде кінцева програма» для кожного вбудованого пресету.
+/// Користувач бачить шляхи одразу після init і може додати їх будь-коли
+/// (`skri preset compose` або повторний init нового проєкту).
+fn print_directions(store: &ProjectStore) -> Result<(), Box<dyn std::error::Error>> {
+    let paths: &[(&str, &str, &str)] = &[
+        ("novelist-uk", "Романіст / вебновел",
+         " Manuscript + живий Story Bible + name-drift + канон-конфлікти. Кінцева програма: редактор глав, що сам читає рукопис."),
+        ("game-narrative-uk", "Гейм-наратив",
+         " dialogue/ з text-first нодами, bark-таблиці замість Excel, аудитор змінних, ліміти локалізації. Кінцева програма: студія діалогів із валідатором."),
+        ("animation-uk", "Сценарист анімації",
+         " Show Bible з правилами світу, валідатор 20-хв епізоду (cold open + 2 turns + hook), мют-тест сцен. Кінцева програма: рев'юер епізодів."),
+        ("note-taker-uk", "Нотатник / Zettelkasten",
+         " Атомарні нотатки + композитор рукопису. Кінцева програма: база знань, що зшивається в тексти."),
+    ];
+    println!("\nНапрямки, які можна увімкнути (кожен — пресет з ассетів):");
+    for (id, title, desc) in paths {
+        let cur = if store.settings()?.get("preset").and_then(|v| v.as_str()) == Some(*id) { " ← ваш" } else { "" };
+        println!("  ● {id} — {title}{cur}");
+        println!("      {desc}");
+    }
+    println!("\n  скомбінувати свій: skri preset compose <назва> entities:<пресет> checklists:<пресет> ...");
     Ok(())
 }
 
@@ -492,4 +528,224 @@ fn cmd_tv(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+
+// --- M3: гейм-наратив і анімація ---
+
+use skri_core::animation;
+use skri_core::inkbridge;
+use skri_core::narrative;
+
+fn cmd_bark(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    match rest.first().map(String::as_str) {
+        Some("add") => {
+            // bark add <папка> <тригер> [пріоритет] [cooldown] -- "варіант 1" "варіант 2"...
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("bark add: вкажіть папку"));
+            let store = open_at(dir);
+            let trigger = rest.get(2).cloned().unwrap_or_else(|| usage_exit("bark add: вкажіть тригер"));
+            let priority: i64 = rest.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let cooldown: i64 = rest.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let variants: Vec<String> = rest.iter().skip(5).map(|s| s.trim_matches('"').to_string()).filter(|s| !s.is_empty()).collect();
+            let id = narrative::upsert_bark(&store, &narrative::Bark {
+                id: 0, trigger: trigger.clone(), conditions: "{}".into(),
+                priority, cooldown, variants, entity_id: None,
+            })?;
+            println!("✔ bark #{id} «{trigger}» збережено (варіантів: {})", narrative::barks(&store)?.iter().find(|b| b.id == id).map(|b| b.variants.len()).unwrap_or(0));
+            Ok(())
+        }
+        Some("list") | Some("csv") | _ => {
+            let dir = rest.get(1).cloned().unwrap_or_else(|| usage_exit("bark: вкажіть папку"));
+            let store = open_at(&dir);
+            if rest.first().map(String::as_str) == Some("csv") {
+                let out = store.root.join(".skri").join("barks.csv");
+                std::fs::write(&out, narrative::export_barks_csv(&store)?)?;
+                println!("✔ CSV: {}", out.display());
+            } else {
+                for b in narrative::barks(&store)? {
+                    println!("● [{}] пріоритет={} cooldown={}с ({} вар.)", b.trigger, b.priority, b.cooldown, b.variants.len());
+                    for v in &b.variants {
+                        println!("    — {v}");
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+fn cmd_vars(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = rest.first().map(String::as_str).unwrap_or_else(|| usage_exit("vars: вкажіть папку"));
+    let store = open_at(dir);
+    let report = narrative::scan_dialogue(&store)?;
+    let audit = narrative::var_audit(&store)?;
+    println!("операцій над змінними: {} (dialogue/*.md)", report.ops);
+    if audit.is_empty() {
+        println!("✔ змінних немає (або dialogue/ порожня)");
+        return Ok(());
+    }
+    println!("\nМатриця set/check (проблемні — зверху):");
+    for a in audit {
+        let flag = if a.orphan_check {
+            "⚠ сирота: check без set"
+        } else if a.dead_flag {
+            "⚠ мертвий: set без check"
+        } else {
+            "✔"
+        };
+        println!("  {flag} {}", a.var_name);
+        if !a.sets.is_empty() { println!("      set:   {}", a.sets.join(", ")); }
+        if !a.checks.is_empty() { println!("      check: {}", a.checks.join(", ")); }
+    }
+    Ok(())
+}
+
+fn cmd_graph(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = rest.first().map(String::as_str).unwrap_or_else(|| usage_exit("graph: вкажіть папку"));
+    let store = open_at(dir);
+    let ddir = store.root.join("dialogue");
+    if !ddir.exists() {
+        println!("диалогових документів немає (папка dialogue/)");
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(&ddir)? {
+        let path = entry?.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") { continue; }
+        let raw = std::fs::read_to_string(&path)?;
+        let body = skri_core::frontmatter::parse(&raw).body;
+        let a = narrative::graph_audit(&body);
+        println!("\n● {} — нод: {}", path.file_name().map(|s| s.to_string_lossy()).unwrap_or_default(), a.total_nodes);
+        if !a.unreachable.is_empty() {
+            println!("  ⚠ недосяжні (немає входу): {}", a.unreachable.join(", "));
+        }
+        if !a.dangling_gotos.is_empty() {
+            println!("  ⚠ goto в неіснуючі ноди: {}", a.dangling_gotos.join(", "));
+        }
+        if a.unreachable.is_empty() && a.dangling_gotos.is_empty() {
+            println!("  ✔ граф чистий");
+        }
+    }
+    Ok(())
+}
+
+fn cmd_episode(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let path = rest.first().cloned().unwrap_or_else(|| usage_exit("episode: вкажіть файл епізоду .md"));
+    let raw = std::fs::read_to_string(&path)?;
+    let body = skri_core::frontmatter::parse(&raw).body;
+    let check = animation::validate_episode(&body, &animation::EpisodeFormat::default());
+    println!("cold open: {}", check.cold_open.as_deref().unwrap_or("— НІ"));
+    println!("turns: {}", check.turns);
+    println!("hook: {}", check.hook.as_deref().unwrap_or("— НІ"));
+    if check.passed {
+        println!("✔ структура 20-хв епізоду валідна");
+    } else {
+        for i in &check.issues { println!("⚠ {i}"); }
+    }
+    println!("\nМют-тест (сцена без звуку):");
+    for b in animation::mute_test(&body) {
+        let flag = if b.verdict.contains("гасне") { "⚠" } else { " " };
+        println!("  {flag} {} — дія:{}/діалог:{} ratio:{} — {}", b.scene, b.action_lines, b.dialogue_lines, b.visual_ratio, b.verdict);
+    }
+    Ok(())
+}
+
+// --- M5: LitRPG Progression Engine (event-sourcing статів) ---
+
+use skri_core::stats;
+
+fn cmd_stats(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let sub = rest.first().map(String::as_str).unwrap_or("sheet");
+    match sub {
+        "sheet" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("stats sheet: вкажіть папку"));
+            let chapter: i64 = rest.get(2).and_then(|s| s.parse().ok()).unwrap_or_else(|| usage_exit("stats sheet: вкажіть номер глави"));
+            let store = open_at(dir);
+            store.reindex()?;
+            let rep = stats::rebuild(&store)?;
+            let rows = stats::sheet(&store, chapter)?;
+            if rows.is_empty() {
+                println!("(станів на главу {chapter} немає — дельти [stat: ...] не знайдено; дельт у рукописі: {})", rep.deltas);
+                return Ok(());
+            }
+            let mut cur = String::new();
+            for r in rows {
+                if r.entity != cur {
+                    println!("\n● {} — стан на главу {chapter}:", r.entity);
+                    cur = r.entity.clone();
+                }
+                println!("  {}: {}", r.attr, r.value);
+            }
+            Ok(())
+        }
+        "diff" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("stats diff: вкажіть папку"));
+            let store = open_at(dir);
+            store.reindex()?;
+            let rep = stats::rebuild(&store)?;
+            println!("✔ снапшотів: {}, дельт: {}", rep.snapshots, rep.deltas);
+            let alerts = stats::change_alerts(&store)?;
+            if alerts.is_empty() {
+                println!("✔ ретроактивних змін немає");
+            } else {
+                println!("⚠ ретроактивних правок: {}", alerts.len());
+                for (id, payload) in alerts {
+                    let v: serde_json::Value = serde_json::from_str(&payload)?;
+                    println!("\n[{id}] {}", v.get("message").and_then(|m| m.as_str()).unwrap_or(""));
+                }
+            }
+            Ok(())
+        }
+        "radar" => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("stats radar: вкажіть папку"));
+            let store = open_at(dir);
+            store.reindex()?;
+            stats::rebuild(&store)?;
+            let alerts = stats::radar_alerts(&store)?;
+            if alerts.is_empty() {
+                println!("✔ stat-error radar чистий (від'ємних hp/mp немає)");
+            } else {
+                println!("⚠ stat-error: {}", alerts.len());
+                for (id, payload) in alerts {
+                    let v: serde_json::Value = serde_json::from_str(&payload)?;
+                    println!("\n[{id}] {}", v.get("message").and_then(|m| m.as_str()).unwrap_or(""));
+                }
+            }
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда stats: {other} (sheet|diff|radar)");
+            exit(2);
+        }
+    }
+}
+
+fn cmd_ink(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    match rest.first().map(String::as_str) {
+        Some("import") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("ink import: вкажіть папку"));
+            let src = rest.get(2).cloned().unwrap_or_else(|| usage_exit("ink import: вкажіть файл .ink або .yarn"));
+            let store = open_at(dir);
+            let rep = inkbridge::import_file(&store, std::path::Path::new(&src))?;
+            println!(
+                "✔ імпортовано {} → dialogue/ (нод: {}, змінних: {})",
+                src, rep.nodes, rep.vars
+            );
+            if rep.external_change {
+                println!("⚠ вхідні правки: файл змінився з останнього імпорту (див. алерти ink-external-change)");
+            }
+            Ok(())
+        }
+        Some("export") => {
+            let dir = rest.get(1).map(String::as_str).unwrap_or_else(|| usage_exit("ink export: вкажіть папку"));
+            let doc = rest.get(2).cloned().unwrap_or_else(|| usage_exit("ink export: вкажіть документ .md"));
+            let out = rest.get(3).cloned().unwrap_or_else(|| usage_exit("ink export: вкажіть файл .ink або .yarn"));
+            let store = open_at(dir);
+            inkbridge::export_file(&store, &doc, std::path::Path::new(&out))?;
+            println!("✔ експортовано {doc} → {out}");
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда ink: {:?} (import|export)", other);
+            exit(2);
+        }
+    }
 }

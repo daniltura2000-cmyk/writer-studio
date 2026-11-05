@@ -1,0 +1,32 @@
+{
+  "preset": "game-narrative-uk",
+  "language": "uk",
+  "description": "Гейм-наративний дизайнер: діалоги text-first, barks, аудитор змінних, локалізаційні ліміти",
+  "entities": [
+    { "name": "персонаж", "fields": ["голос", "тон", "репліки-блокери"] },
+    { "name": "локація", "fields": ["зона", "рівень"] },
+    { "name": "квест", "fields": ["статус", "передумови"] },
+    { "name": "bark-тригер", "fields": ["пріоритет", "cooldown"] }
+  ],
+  "structure": {
+    "діалоги": { "документ": ["нода"] },
+    "квести": { "квест": ["крок"] }
+  },
+  "checklists": [
+    { "name": "перед-імплементацією", "items": ["var-audit", "graph-audit", "bark-duplicates", "limits-scan"] },
+    { "name": "bark-якість", "items": ["10-15 варіантів", "без дублів", "тон персонажа"] }
+  ],
+  "validators": {
+    "name-drift": true,
+    "var-orphan-check": true,
+    "var-dead-flag": true,
+    "graph-unreachable": true,
+    "graph-dangling-goto": true,
+    "bark-duplicate": true,
+    "loc-limits": true
+  },
+  "templates": {
+    "dialogue-node": "-> {{нода}}\n{{персонаж}}: {{репліка}}\n[goto {{наступна}}]\n",
+    "bark-sheet": "# {{тригер}}\nумови: {{умови}}\nпріоритет: {{n}}\ncooldown: {{сек}}\n- варіант 1\n- варіант 2\n"
+  }
+}

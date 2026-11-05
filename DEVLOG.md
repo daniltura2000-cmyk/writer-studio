@@ -106,3 +106,112 @@ skri init/index/drift/bible/model/search — вручну на демо-проє
 cargo test → 34 passed (15 unit + 11 acceptance M0/M1 + 8 acceptance M2), 0 failed
 CLI вручну: glossary/limits/tv/translate dry/preset compose — OK
 ```
+
+## 2026-11-05 (продовження) — M3: round-trip Ink/Yarn (inkbridge)
+
+### Що зроблено
+- **inkbridge.rs** — round-trip міст .ink/.yarn ↔ text-first markdown:
+  - імпорт: Ink-ноди (`== knot`), `VAR`, `~ set` (з операторами =/+=/-=), standalone-диверти
+    `-> X`, диверти в кінці рядка, вибори `* [текст] -> X`, whole-line умови `{ x }`;
+    Yarn: `title:`/`---`/`===`, `[[Target]]`/`[[Текст|Target]]`, `<<set $x = v>>` (і форма `to`),
+    `<<if $x>>`. Все → markdown з `-> нода` / `[goto нода]` / `%SET/%CHECK` маркерами
+    (сумісно з narrative::scan_dialogue/graph_audit — `skri vars` і `skri graph` бачать імпортовані документи).
+  - експорт назад у .ink/.yarn; round-trip імпорт→експорт→імпорт дає семантично
+    еквівалентний документ (тест на фікстурах укр./англ.).
+  - VAR-декларації Ink → frontmatter `ink-vars: x=5; y=...` → назад у `VAR`.
+- **Детект зовнішніх змін**: SHA-256 (std-only, без нових залежностей) імпортованого
+  файлу в таблиці `ink_imports`; якщо файл змінився з останнього імпорту (правки
+  з боку рушія/git diff інших) — алерт kind='ink-external-change' з payload
+  (src, old_hash, new_hash). Повторний імпорт без змін нових алертів не дає.
+- **CLI**: `skri ink import <папка> <файл.ink|.yarn>`, `skri ink export <папка> <док.md> <файл.ink|.yarn>`.
+
+### Знайдені тестами
+1. Подвійний `=`: split_assign повертав "op value" одним рядком, а set_line додавав
+   `= ` повторно → `%SET x = = 5`. Виправлено: (ім'я, оператор, значення) окремо.
+2. `VAR` до першої ноди з'їдався guard'ом «проза до першої ноди» → VAR-парсинг
+   перенесено до guard'а.
+3. Порядок кортежу parse_var_ops — (op, name, pos), а не (name, op, ...) — тест спочатку
+   читав його навпаки.
+
+### Свідомі обмеження підмножини (документовані в док-коментарі)
+- Інлайн-умови Ink `{...}` всередині речення лишаються прозою як є (round-trip їх зберігає,
+  але аудитор змінних їх не бачить); складні yarn-умови `<<if $a and $b>>` — так само.
+- Ігноруються: position/color/tags-заголовки Yarn, glue, stitches Inka.
+
+### Прогін
+```
+cargo test → 54 passed (у т.ч. 4 нових m3_inkbridge), 0 failed
+CLI вручну: ink import (укр. .ink) → dialogue/quest.md → ink export → back.ink байт-в-байт
+```
+
+## 2026-11-05 (продовження) — M2.5/M3.5: каркас Tauri UI (app/tauri)
+
+### Що зроблено
+- **`app/tauri`** — третій член workspace: Tauri 2.12.5 + tauri-build 2.7.4
+  (останні стабільні 2.x; залежності лише tauri + tauri-build + serde/serde_json + skri-core).
+  Фронт — статичні файли `app/tauri/ui/` (vanilla JS, БЕЗ build-степу і npm-залежностей):
+  `frontendDist: "ui"` у tauri.conf.json, `withGlobalTauri: true` → `window.__TAURI__.core.invoke`.
+- **Invoke-команди** (`app/tauri/src/commands.rs`, усі викликають існуючі публічні API
+  skri-core — сам core не змінено):
+  `list_directions` (4 напрямки, дзеркало `print_directions` з main.rs, збагачене
+  `presets::builtin_list()`), `model_catalog` (= `models::catalog_json()`),
+  `project_info`, `run_index` (reindex+scan+sync_bible+merge+scan_dialogue — як `skri index`),
+  `run_bible` (`bible::cards`), `run_drift` (`drift::detect` + усі невирішені алерти),
+  `var_audit`, `barks`, `episode_validate` (validate_episode + mute_test + check_bible_rules),
+  `set_model` (кнопка каталогу → `.skri/settings.json`).
+- **Екрани** (style-референс `docs/ui/model-picker.html`): Напрямки (4 кнопки-напрямки
+  з описом кінцевої програми), Моделі (кнопковий каталог 1:1 з мокапом, вибір зберігається
+  через set_model), Біблія (картки сутностей + зведення реіндексації), Алерти
+  (drift/конфлікти, аудит змінних, bark-таблиця, валідатор епізоду + мют-тест + правила Show Bible).
+- Структура: `src/main.rs` (Builder + generate_handler), `src/commands.rs` (команди + DTO,
+  бо EntityCard/Alert у core без Serialize), `ui/index.html|app.js|style.css`,
+  `icons/icon.ico` (згенерована заглушка 16×16), `bundle.active=false` до завершення M2.5.
+  Докладніше — `app/tauri/README.md`.
+
+### Прогін
+```
+cargo check --workspace → Finished dev profile in 3m02s (skri-tauri + tauri 2.12.5 скомпільовано)
+```
+Warnings лише наявні в skri-core (translate.rs unused import, stats.rs unused mut) — не з UI.
+
+### Як добудувати далі
+- Повний запуск: `cd app/tauri && cargo tauri dev` (tauri-cli: `cargo install tauri-cli --version "^2"`),
+  або просто `cargo run` — фронт статичний, generate_context! вбудовує `ui/`.
+- Діалог вибору папки проєкту — додати `tauri-plugin-dialog` (зараз шлях вводиться вручну,
+  запам'ятовується в localStorage).
+- Редагування (маскир alias-ів, resolve алертів, upsert bark) — нові команди поверх
+  існуючих мутаторів core; поки каркас read-only + set_model.
+
+## 2026-11-05 (продовження) — M5: LitRPG Progression Engine (event-sourcing статів)
+
+### Що зроблено
+- **stats.rs** — дельти статів парсяться прямо з рукопису: `[stat: Кальдрін рівень +2]`,
+  `[stat: Кальдрін hp -30]`, `[stat: Кальдрін xp += 150]` (голе число = приріст;
+  оператор працює і впритул `+=150`, і окремим токеном `+= 150`; сутність може
+  містити пробіл — атрибут і значення завжди два останні токени). Теги шукаються
+  ASCII-незалежно від регістру по байтах (шаблон чистий ASCII → кириличні
+  offset-и не ламаються), кілька тегів на рядок підтримано.
+- **Snapshot-модель**: `stat_snapshots(entity_name, attr, chapter, value)` —
+  кумулятивний стан ПІСЛЯ глави; перебудова з manuscript/ ідемпотентна
+  (номер глави = ведучі цифри імені файла, інакше порядок у docs). Стан на
+  гл. N = рядок з MAX(chapter) ≤ N.
+- **Ретроактивна правка**: rebuild порівнює старі vs нові снапшоти → алерт
+  `kind='stat-change'` з payload (глава, старе → нове, з каскадом по пізніх
+  главах); невирішені stat-change перезаписуються щоразу — повторний прогін
+  без правок алертів не плодить.
+- **Stat sheet preview**: `skri stats sheet <папка> <глава>` — стан усіх
+  персонажів, як читач бачить у гл. N. **Stat-error radar**: від'ємні hp/mp →
+  алерт `kind='stat-error'` (один на атрибут, із переліком глав-порушень).
+
+### Знайдені тестами (і виправлені)
+1. `-= 30` з пробілом (оператор окремим токеном) парсився як attr="-=", value=+30
+   → парсер розпізнає обидві форми оператора.
+2. Радар рахував алерти по рядках снапшотів (по одному на главу) → згруповано
+   по (сутність, атрибут).
+
+### Прогін
+```
+cargo test → 54 passed (21 unit + 11 M0/M1 + 8 M2 + 6 M3 + 4 inkbridge + 4 m5_stats), 0 failed
+CLI вручну: stats sheet (кумулятив по главах), stats diff (ретроактивна правка
+hp 100→200: «глава 1: 100 → 200; глава 2: -30 → 70», повторний прогін чистий), stats radar — OK
+```

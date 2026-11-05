@@ -1,0 +1,28 @@
+{
+  "preset": "animation-uk",
+  "language": "uk",
+  "description": "Сценарист анімації: Show Bible з правилами, валідатор 20-хв епізоду (cold open + 2 turns + hook), мют-тест",
+  "entities": [
+    { "name": "персонаж", "fields": ["дизайн", "голос", "арка"] },
+    { "name": "локація", "fields": ["сезон"] },
+    { "name": "епізод", "fields": ["сезон", "номер"] },
+    { "name": "правило світу", "fields": ["ключові слова"] }
+  ],
+  "structure": {
+    "серіал": { "сезон": { "епізод": ["сцена"] } }
+  },
+  "checklists": [
+    { "name": "перед-здачею епізоду", "items": ["cold-open", "min-2-turns", "hook", "mute-test", "bible-rules"] }
+  ],
+  "validators": {
+    "episode-structure": true,
+    "dialogue-streak": true,
+    "mute-test": true,
+    "bible-rules": true,
+    "name-drift": true
+  },
+  "templates": {
+    "scene": "## СЦЕНА: {{назва}}\n\n{{action lines}}\n\n{{ПЕРСОНА}}: {{репліка}}\n",
+    "episode-skeleton": "## СЦЕНА: COLD OPEN — {{тізер}}\n\n## СЦЕНА: {{акт 1}}\n\n## СЦЕНА: {{акт 2}}\n\n## СЦЕНА: {{акт 3}}\n\n## СЦЕНА: ФІНАЛ — Гачок\n"
+  }
+}

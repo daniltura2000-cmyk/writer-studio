@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/skri-core", "crates/skri-cli"]
+members = ["crates/skri-core", "crates/skri-cli", "app/tauri"]
 
 [workspace.package]
 version = "0.1.0"
