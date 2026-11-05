@@ -1,0 +1,75 @@
+:root { --bg:#fafafa; --card:#fff; --line:#e5e5e5; --ink:#1a1a1a; --mut:#6b7280; --acc:#4f46e5; --bad:#b91c1c; --ok:#065f46; }
+* { box-sizing:border-box; margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+body { background:var(--bg); color:var(--ink); }
+
+header { padding:16px 32px 0; }
+h1 { font-size:20px; margin-bottom:8px; }
+.projbar { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.projbar input { flex:1; max-width:520px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:13px; }
+.projbar button { padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:var(--card); cursor:pointer; }
+.proj-state { font-size:12px; color:var(--mut); }
+.proj-state.ok { color:var(--ok); }
+.proj-state.bad { color:var(--bad); }
+
+nav { display:flex; gap:6px; padding:8px 32px; border-bottom:1px solid var(--line); }
+nav .tab { padding:8px 16px; border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0; background:transparent; cursor:pointer; font-size:14px; }
+nav .tab.active { background:var(--card); border-color:var(--line); font-weight:600; }
+
+main { padding:20px 32px; max-width:900px; }
+.screen { display:none; }
+.screen.active { display:block; }
+h2 { font-size:18px; margin-bottom:4px; }
+.sub { color:var(--mut); font-size:13px; margin-bottom:18px; }
+.row { display:flex; gap:8px; margin:12px 0; align-items:center; }
+.row input { flex:1; max-width:360px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:13px; }
+button.act { padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:var(--card); cursor:pointer; }
+button.act:hover { border-color:var(--acc); }
+
+/* Онбордінг — 4 напрямки */
+.dir-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+button.dir { text-align:left; padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--card); cursor:pointer; }
+button.dir:hover { border-color:var(--acc); box-shadow:0 0 0 2px rgba(79,70,229,.12); }
+button.dir .t { font-weight:600; font-size:15px; display:block; margin-bottom:6px; }
+button.dir .o { color:var(--mut); font-size:13px; display:block; margin-bottom:6px; }
+button.dir .p { color:var(--acc); font-size:11px; }
+
+/* Моделі — як docs/ui/model-picker.html */
+.grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px; }
+button.task { text-align:left; padding:14px; border:1px solid var(--line); border-radius:10px; background:var(--card); cursor:pointer; }
+button.task.active { border-color:var(--acc); box-shadow:0 0 0 2px rgba(79,70,229,.15); }
+button.task .t { font-weight:600; font-size:14px; display:block; margin-bottom:4px; }
+button.task .h { color:var(--mut); font-size:12px; }
+.opts { border:1px solid var(--line); border-radius:10px; background:var(--card); padding:16px; }
+.opts h2 { font-size:15px; margin-bottom:2px; }
+.opts .hint { color:var(--mut); font-size:12px; margin-bottom:12px; }
+label.opt { display:flex; gap:10px; padding:10px; border-radius:8px; cursor:pointer; align-items:flex-start; }
+label.opt:hover { background:#f5f5ff; }
+label.opt input { margin-top:3px; accent-color:var(--acc); }
+.opt .l { font-size:14px; font-weight:500; }
+.opt .n { font-size:12px; color:var(--mut); }
+.badge { font-size:11px; padding:1px 7px; border-radius:99px; margin-left:6px; vertical-align:1px; }
+.b-auto { background:#eef2ff; color:var(--acc); }
+.b-cloud { background:#fef3c7; color:#92400e; }
+.b-local { background:#ecfdf5; color:#065f46; }
+
+.json { margin-top:14px; background:#111827; color:#d1fae5; border-radius:8px;
+  padding:12px; font:12px/1.5 ui-monospace,Consolas,monospace; white-space:pre-wrap; overflow-x:auto; max-height:340px; }
+.note { color:var(--mut); font-size:12px; margin-top:12px; }
+
+/* Біблія — картки сутностей */
+.cards { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:14px; }
+.card { border:1px solid var(--line); border-radius:10px; background:var(--card); padding:14px; }
+.card .name { font-weight:600; font-size:15px; }
+.card .type { font-size:11px; color:var(--acc); background:#eef2ff; padding:1px 8px; border-radius:99px; margin-left:8px; }
+.card .meta { font-size:12px; color:var(--mut); margin:6px 0; }
+.card ul { font-size:12px; margin:4px 0 0 16px; }
+.card .al { color:var(--mut); }
+
+/* Алерти */
+.group { border:1px solid var(--line); border-radius:10px; background:var(--card); padding:12px 14px; margin:10px 0; }
+.group .kind { font-size:11px; padding:1px 8px; border-radius:99px; background:#fef3c7; color:#92400e; margin-left:8px; }
+.group pre { font:12px/1.5 ui-monospace,Consolas,monospace; white-space:pre-wrap; }
+.warn { color:var(--bad); font-size:13px; }
+table.t { border-collapse:collapse; width:100%; margin:10px 0; font-size:13px; background:var(--card); }
+table.t th, table.t td { border:1px solid var(--line); padding:6px 10px; text-align:left; }
+table.t th { background:#f3f4f6; }

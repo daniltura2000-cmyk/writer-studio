@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Writer Studio — Скрипторій</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Writer Studio</h1>
+    <div class="projbar">
+      <input id="projRoot" type="text" placeholder="C:\шлях\до\проєкту (папка з .skri)">
+      <button id="openProj">Відкрити</button>
+      <span id="projState" class="proj-state"></span>
+    </div>
+  </header>
+
+  <nav>
+    <button class="tab active" data-tab="onboarding">Напрямки</button>
+    <button class="tab" data-tab="models">Моделі</button>
+    <button class="tab" data-tab="bible">Біблія</button>
+    <button class="tab" data-tab="alerts">Алерти</button>
+  </nav>
+
+  <main>
+    <!-- Онбордінг: 4 кнопки-напрямки -->
+    <section id="onboarding" class="screen active">
+      <h2>Оберіть напрямок</h2>
+      <div class="sub">Кожен напрямок — пресет з ассетів. Нижче — «якою буде кінцева програма».</div>
+      <div class="dir-grid" id="dirs"></div>
+    </section>
+
+    <!-- Моделі: кнопковий каталог -->
+    <section id="models" class="screen">
+      <h2>Вибір моделі — по суті задачі</h2>
+      <div class="sub">Каталог живиться з <code>models::catalog_json()</code>. Автовибір рекомендований і завжди локальний; хмара — лише вручну.</div>
+      <div class="grid" id="tasks"></div>
+      <div class="opts" id="panel">
+        <h2>Оберіть задачу</h2>
+        <div class="hint">Натисніть кнопку задачі зверху — покажемо моделі.</div>
+      </div>
+      <div class="json" id="modelOut">— виберіть задачу і модель —</div>
+      <div class="note">Вибір зберігається в <code>.skri/settings.json</code> → розділ «models».
+        Ті самі дані доступні з CLI: <code>skri model menu|auto|set|status</code>.</div>
+    </section>
+
+    <!-- Біблія: картки сутностей -->
+    <section id="bible" class="screen">
+      <h2>Story Bible</h2>
+      <div class="sub">Картки сутностей = агрегат згадок + assertions з bible/*.md.</div>
+      <button id="btnIndex">Реіндексувати проєкт</button>
+      <div class="json" id="indexOut" hidden></div>
+      <div class="cards" id="cards"></div>
+    </section>
+
+    <!-- Алерти: drift / conflict / stats -->
+    <section id="alerts" class="screen">
+      <h2>Алерти консистентності</h2>
+      <div class="sub">Name-drift, канон-конфлікти, аудит змінних, barks, валідація епізоду.</div>
+      <div class="row">
+        <button id="btnDrift">Скан drift і конфліктів</button>
+        <button id="btnVars">Аудит змінних</button>
+        <button id="btnBarks">Bark-таблиця</button>
+      </div>
+      <div id="driftOut"></div>
+      <div class="row">
+        <input id="epPath" type="text" placeholder="manuscript/ep01.md">
+        <button id="btnEpisode">Валідувати епізод</button>
+      </div>
+      <div id="epOut"></div>
+      <div id="varsOut"></div>
+      <div id="barksOut"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
