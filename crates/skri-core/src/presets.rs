@@ -7,6 +7,11 @@ use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+/// Людський опис за замовчуванням (якщо маніфест без `desc`).
+fn default_desc() -> String {
+    String::new()
+}
+
 /// Тип сутності з кастомними полями.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityType {
@@ -42,6 +47,12 @@ pub struct PresetManifest {
     pub preset: String,
     #[serde(default = "default_lang")]
     pub language: String,
+    /// Людський опис: одна зрозуміла фраза «що програма буде робити для тебе».
+    #[serde(default = "default_desc")]
+    pub desc: String,
+    /// Людське «Для кого: …» — кому цей пресет підходить.
+    #[serde(default = "default_desc")]
+    pub best_for: String,
     #[serde(default)]
     pub entities: Vec<EntityType>,
     #[serde(default)]
@@ -99,6 +110,7 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("game-narrative-uk", include_str!("../../../presets/game-narrative-uk.json")),
     ("animation-uk", include_str!("../../../presets/animation-uk.json")),
     ("journalist-uk", include_str!("../../../presets/journalist-uk.json")),
+    ("webnovelist-uk", include_str!("../../../presets/webnovelist-uk.json")),
 ];
 
 /// Завантажити вбудований пресет за назвою.
@@ -191,6 +203,8 @@ pub fn compose(spec: &str, name: &str, language: Option<&str>) -> Result<PresetM
     let manifest = PresetManifest {
         preset: name.to_string(),
         language: lang,
+        desc: String::new(),
+        best_for: String::new(),
         entities,
         structure: structure.unwrap_or(serde_json::json!({})),
         checklists,
@@ -208,7 +222,10 @@ pub fn save_to_json(p: &PresetManifest, path: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
-/// Список вбудованих пресетів: (назва, опис).
+/// Список вбудованих пресетів: (назва, людський опис).
+///
+/// Опис = `desc` маніфесту («що програма буде робити для тебе») + `best_for`
+/// («Для кого: …»). Це те саме джерело, що живить CLI і PresetDto в UI.
 pub fn builtin_list() -> Vec<(String, String)> {
     BUILTIN
         .iter()
@@ -221,12 +238,11 @@ pub fn builtin_list() -> Vec<(String, String)> {
 }
 
 fn describe(p: &PresetManifest) -> String {
-    let types: Vec<&str> = p.entities.iter().map(|e| e.name.as_str()).collect();
-    format!(
-        "мова: {}; сутності: {}",
-        p.language,
-        types.join(", ")
-    )
+    if p.best_for.trim().is_empty() {
+        p.desc.clone()
+    } else {
+        format!("{} {}", p.desc.trim_end_matches('.'), p.best_for)
+    }
 }
 
 #[cfg(test)]

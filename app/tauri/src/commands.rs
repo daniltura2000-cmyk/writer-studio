@@ -374,6 +374,46 @@ pub fn write_doc(root: String, rel: String, body: String) -> CmdResult<()> {
     Ok(())
 }
 
+/// Створити нову главу: manuscript/NNN-назва.md з шаблоном frontmatter
+/// (title + pub_status: draft). Повертає шлях новоствореного файла.
+#[tauri::command]
+pub fn new_doc(root: String, title: String) -> CmdResult<String> {
+    let store = open(&root)?;
+    let dir = store.root.join("manuscript");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("не вдалося створити manuscript/: {e}"))?;
+    // наступний номер: максимум ведучих цифр наявних імен файлів
+    let mut max_n: usize = 0;
+    if let Ok(rd) = std::fs::read_dir(&dir) {
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            let digits: String = name.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if let Ok(n) = digits.parse::<usize>() {
+                max_n = max_n.max(n);
+            }
+        }
+    }
+    // безпечне ім'я файла: заборонені для Windows символи → дефіс, перенос рядка → пробіл
+    let safe: String = title
+        .trim()
+        .replace(['\r', '\n'], " ")
+        .chars()
+        .map(|c| if matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '-' } else { c })
+        .collect();
+    let safe = safe.trim().trim_matches('-').trim().to_string();
+    let fname = if safe.is_empty() {
+        format!("{:03}.md", max_n + 1)
+    } else {
+        format!("{:03}-{}.md", max_n + 1, safe)
+    };
+    let rel = format!("manuscript/{fname}");
+    let clean_title = title.trim().replace(['\r', '\n'], " ");
+    let body = format!("---\ntitle: {clean_title}\npub_status: draft\n---\n\n# {clean_title}\n\n");
+    std::fs::write(store.root.join(&rel), body)
+        .map_err(|e| format!("не вдалося створити {rel}: {e}"))?;
+    store.reindex().map_err(|e| e.to_string())?;
+    Ok(rel)
+}
+
 // --- Онбордінг: пресети і створення проєкту ---
 
 #[derive(serde::Serialize)]
@@ -486,6 +526,20 @@ pub fn release_set_status(
     let store = open(&root)?;
     release::set_status(&store, &rel, &status, pub_date.as_deref(), &[])
         .map_err(|e| e.to_string())
+}
+
+// --- Мета алертів: людські назви/пояснення/дії для UI (uk/en/ru) ---
+//
+// Джерело правди — crates/skri-core/src/alerts_meta.rs (pub fn catalog_json):
+// поля kind/severity/title_uk..action_ru. UI НЕ дублює ці тексти в js
+// (лише emergency-фолбек, якщо команда недоступна — старий бінарі).
+
+/// Каталог видів алертів людською мовою — для карток на екрані
+/// «Знайдені проблеми». Серйозність: problem = треба виправити,
+/// tip = порада, на яку варто глянути.
+#[tauri::command]
+pub fn get_alerts_meta() -> CmdResult<serde_json::Value> {
+    Ok(skri_core::alerts_meta::catalog_json())
 }
 
 // --- «Перевірити»: конвеєр indexer+bible+drift+валідатори ---
@@ -607,5 +661,30 @@ mod tests {
         assert_eq!(docs[0].path, "manuscript/01.md");
         assert_eq!(docs[0].title, "Глава один");
         assert_eq!(docs[0].word_count, 3);
+    }
+
+    /// new_doc: нумерація NNN, шаблон frontmatter, реіндекс бачить нову главу.
+    #[test]
+    fn new_doc_numbers_and_templates() {
+        let root = tmp_root("newdoc");
+        let _store = ProjectStore::init(std::path::Path::new(&root), "novelist-uk", "uk").expect("init");
+        std::fs::create_dir_all(std::path::Path::new(&root).join("manuscript")).unwrap();
+        std::fs::write(std::path::Path::new(&root).join("manuscript/01-старт.md"), "текст").unwrap();
+
+        let rel1 = new_doc(root.clone(), "Таємничий ліс".into()).unwrap();
+        assert_eq!(rel1, "manuscript/002-Таємничий ліс.md");
+        let raw = std::fs::read_to_string(std::path::Path::new(&root).join(&rel1)).unwrap();
+        assert!(raw.starts_with("---\ntitle: Таємничий ліс\npub_status: draft\n---\n"));
+        assert!(raw.contains("# Таємничий ліс"));
+
+        // заборонені для Windows символи санітизуються; наступний номер 003
+        let rel2 = new_doc(root.clone(), "a/b:c?d".into()).unwrap();
+        assert_eq!(rel2, "manuscript/003-a-b-c-d.md");
+
+        // реіндекс (list_docs) бачить обидві нові глави
+        let docs = list_docs(root.clone()).unwrap();
+        let paths: Vec<&str> = docs.iter().map(|d| d.path.as_str()).collect();
+        assert!(paths.contains(&rel1.as_str()));
+        assert!(paths.contains(&rel2.as_str()));
     }
 }

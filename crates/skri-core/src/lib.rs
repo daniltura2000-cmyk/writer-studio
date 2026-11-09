@@ -7,6 +7,7 @@
 //! - [`bible`]   — живий Story Bible: картки сутностей, assertions, конфлікти
 //! - [`presets`] — композабельні пресети жанрів (JSON-маніфести)
 
+pub mod alerts_meta;
 pub mod animation;
 pub mod bible;
 pub mod crosspost;
