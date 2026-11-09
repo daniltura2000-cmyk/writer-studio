@@ -132,6 +132,9 @@ const I18N = {
     ed_meta_fm: "службові поля:",
     ed_meta_nofm: "без службового блоку",
     confirm_unsaved: "Є незбережені зміни. Перейти без збереження?",
+    fqa09_save_first: "Зберегти незбережені зміни перед відкриттям іншого проєкту?",
+    fqa09_save_failed: "Не вдалося зберегти — проєкт НЕ змінено.",
+    fqa09_discard_confirm: "Скинути незбережені зміни?",
     // моделі (QA-08: чесний каталог)
     models_t: "Налаштування моделей",
     models_sub: "Для різних справ програма використовує різні «мозки». Вибери справу — покажемо, хто її виконує. Перша модель завжди рекомендована і працює на твоєму комп'ютері.",
@@ -318,6 +321,9 @@ const I18N = {
     ed_meta_fm: "frontmatter:",
     ed_meta_nofm: "no frontmatter",
     confirm_unsaved: "There are unsaved changes. Leave without saving?",
+    fqa09_save_first: "Save unsaved changes before opening another project?",
+    fqa09_save_failed: "Could not save — project NOT switched.",
+    fqa09_discard_confirm: "Discard unsaved changes?",
     models_t: "Model settings",
     models_sub: "For different jobs the app uses different “brains”. Pick a job and we'll show who does it. The first model is always recommended and runs on your computer.",
     pick_task: "Pick a job",
@@ -499,6 +505,9 @@ const I18N = {
     ed_meta_fm: "служебные поля:",
     ed_meta_nofm: "без служебного блока",
     confirm_unsaved: "Есть несохранённые изменения. Перейти без сохранения?",
+    fqa09_save_first: "Сохранить несохранённые изменения перед открытием другого проекта?",
+    fqa09_save_failed: "Не удалось сохранить — проект НЕ переключён.",
+    fqa09_discard_confirm: "Сбросить несохранённые изменения?",
     models_t: "Настройки моделей",
     models_sub: "Для разных дел программа использует разные «мозги». Выберите дело — покажем, кто его выполняет. Первая модель всегда рекомендована и работает на вашем компьютере.",
     pick_task: "Выберите дело",
@@ -776,6 +785,18 @@ function resetProjectState() {
 }
 
 async function openProject(path, quiet = false) {
+  // FQA-09 (P1): незбережений текст НЕ може зникати при зміні проєкту.
+  // Три стани двома confirm: «Зберегти» → save і продовжити;
+  // «Скинути» → продовжити; «Скасувати» → взагалі не чіпати проєкт.
+  if (!quiet && currentDoc && dirty) {
+    if (confirm(t("fqa09_save_first"))) {
+      const r = await cmdq("write_doc", { rel: currentDoc.path, body: editor.value });
+      if (r.err != null) { alert(t("fqa09_save_failed") + "\n" + r.err); return false; }
+      dirty = false;
+    } else if (!confirm(t("fqa09_discard_confirm"))) {
+      return false; // скасовано — залишаємось у поточному проєкті з текстом
+    }
+  }
   root = path;
   projGen++; // QA-10: stale-результати перевірок попереднього проєкту ігноруються
   localStorage.setItem("skri.root", root);
