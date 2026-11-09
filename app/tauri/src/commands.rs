@@ -7,7 +7,7 @@ use skri_core::{
 
 // --- DTO-структури для фронту (core-структури без Serialize не тягнемо) ---
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct Direction {
     pub id: &'static str,
     pub title: &'static str,
@@ -17,31 +17,33 @@ pub struct Direction {
     pub preset_info: Option<String>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct EntityCardDto {
     pub entity_id: i64,
     pub entity_type: String,
     pub canonical: String,
     pub aliases: Vec<String>,
     pub mention_total: usize,
+    /// джерело картки: 'manual' (досьє автора) або 'auto' (знайдено в тексті)
+    pub source: String,
     pub docs: Vec<DocHits>,
     pub assertions: Vec<AssertionDto>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct DocHits {
     pub path: String,
     pub mentions: i64,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct AssertionDto {
     pub attribute: String,
     pub value: String,
     pub doc: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct AlertDto {
     pub id: i64,
     pub kind: String,
@@ -55,7 +57,7 @@ pub struct DriftReport {
     pub alerts: Vec<AlertDto>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct IndexReport {
     pub docs: usize,
     pub words: usize,
@@ -69,7 +71,7 @@ pub struct IndexReport {
     pub merged: usize,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct EpisodeReport {
     pub check: animation::EpisodeCheck,
     pub mute: Vec<animation::MuteBeat>,
@@ -180,6 +182,20 @@ pub fn run_bible(root: String) -> CmdResult<Vec<EntityCardDto>> {
     let store = open(&root)?;
     full_pipeline(&store)?;
     let cards = bible::cards(&store).map_err(|e| e.to_string())?;
+    // джерело кожної картки (manual = досьє автора, auto = знайдено в тексті)
+    let mut sources: std::collections::HashMap<i64, String> = std::collections::HashMap::new();
+    {
+        let mut stmt = store
+            .conn()
+            .prepare("SELECT id, source FROM entities")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+            .map_err(|e| e.to_string())?;
+        for (id, src) in rows.flatten() {
+            sources.insert(id, src);
+        }
+    }
     Ok(cards
         .into_iter()
         .map(|c| EntityCardDto {
@@ -188,6 +204,10 @@ pub fn run_bible(root: String) -> CmdResult<Vec<EntityCardDto>> {
             canonical: c.canonical,
             aliases: c.aliases,
             mention_total: c.mention_total,
+            source: sources
+                .get(&c.entity_id)
+                .cloned()
+                .unwrap_or_else(|| "auto".to_string()),
             docs: c
                 .docs
                 .into_iter()
@@ -198,6 +218,66 @@ pub fn run_bible(root: String) -> CmdResult<Vec<EntityCardDto>> {
                 .into_iter()
                 .map(|(attribute, value, doc)| AssertionDto { attribute, value, doc })
                 .collect(),
+        })
+        .collect())
+}
+
+/// Досьє автора: створити/перезаписати manual-картку Story Bible.
+/// Перезапис іде за іменем (canonical_form, без урахування регістру).
+/// Після збереження — реіндекс і синк біблії, щоб нова картка одразу
+/// була у списку і брала участь у перевірках.
+#[tauri::command]
+pub fn add_dossier(
+    root: String,
+    name: String,
+    aliases: Vec<String>,
+    kind: String,
+    notes: String,
+) -> CmdResult<()> {
+    let store = open(&root)?;
+    // Перезапис іде по імені: беремо фактичну канонічну форму з БД
+    // (без урахування регістру — lower() у SQLite ASCII-only, тому
+    // звіряємо через Rust to_lowercase, щоб працювала й кирилиця).
+    let resolved: String = {
+        let mut stmt = store
+            .conn()
+            .prepare("SELECT canonical_form FROM entities")
+            .map_err(|e| e.to_string())?;
+        let rows: Vec<String> = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        let want = name.to_lowercase();
+        rows.into_iter()
+            .find(|n| n.to_lowercase() == want)
+            .unwrap_or_else(|| name.clone()) // імені ще нема — нове досьє
+    };
+    let card = bible::ManualCard {
+        name: resolved,
+        aliases,
+        kind,
+        notes,
+    };
+    bible::add_manual_card(&store.root.to_string_lossy(), &card)
+        .map_err(|e| format!("не вдалося зберегти досьє: {e}"))?;
+    store.reindex().map_err(|e| e.to_string())?;
+    bible::sync_bible(&store).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Style-перевірки рукопису (повтори, довгі речення, канцелярит тощо).
+/// Викликається кнопкою «Перевірити» після основних валідаторів.
+#[tauri::command]
+pub fn run_style(root: String) -> CmdResult<Vec<AlertDto>> {
+    let alerts = skri_core::style::run_style_checks(&root).map_err(|e| e.to_string())?;
+    Ok(alerts
+        .into_iter()
+        .map(|a| AlertDto {
+            id: a.id,
+            kind: a.kind,
+            entity_id: a.entity_id,
+            payload: a.payload,
         })
         .collect())
 }
@@ -271,7 +351,7 @@ pub fn set_model(root: String, task: String, model: String, auto: bool) -> CmdRe
 
 // --- Редактор: документи manuscript/ ---
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct DocDto {
     pub path: String,
     pub title: String,
@@ -316,7 +396,7 @@ pub fn list_docs(root: String) -> CmdResult<Vec<DocDto>> {
     Ok(rows.flatten().collect())
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct DocBody {
     pub path: String,
     pub title: String,
@@ -416,7 +496,7 @@ pub fn new_doc(root: String, title: String) -> CmdResult<String> {
 
 // --- Онбордінг: пресети і створення проєкту ---
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct PresetDto {
     pub id: String,
     pub desc: String,
@@ -441,7 +521,7 @@ pub fn init_project(root: String, preset: String) -> CmdResult<()> {
 
 // --- Реліз: kanban + прогноз буфера ---
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct ChapterDto {
     pub doc_path: String,
     pub title: String,
@@ -452,13 +532,13 @@ pub struct ChapterDto {
     pub word_count: i64,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct ReleaseColumnDto {
     pub status: String,
     pub chapters: Vec<ChapterDto>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct ForecastDto {
     pub window: usize,
     pub words_per_day: f64,
@@ -470,7 +550,7 @@ pub struct ForecastDto {
     pub exhaustion_date: Option<String>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct ReleaseBoard {
     pub columns: Vec<ReleaseColumnDto>,
     pub forecast: ForecastDto,
@@ -544,7 +624,7 @@ pub fn get_alerts_meta() -> CmdResult<serde_json::Value> {
 
 // --- «Перевірити»: конвеєр indexer+bible+drift+валідатори ---
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct CheckReport {
     pub docs: usize,
     pub words: usize,
@@ -686,5 +766,63 @@ mod tests {
         let paths: Vec<&str> = docs.iter().map(|d| d.path.as_str()).collect();
         assert!(paths.contains(&rel1.as_str()));
         assert!(paths.contains(&rel2.as_str()));
+    }
+
+    /// add_dossier: досьє автора створює manual-картку, run_bible показує
+    /// її з source='manual'; повторний виклик з тим самим іменем перезаписує.
+    #[test]
+    fn add_dossier_creates_and_overwrites_manual_card() {
+        let root = tmp_root("dossier");
+        let _store = ProjectStore::init(std::path::Path::new(&root), "novelist-uk", "uk").expect("init");
+
+        add_dossier(
+            root.clone(),
+            "Міра".into(),
+            vec!["Міра Велан".into(), "Мірочка".into()],
+            "character".into(),
+            "стежити: шрам на лівій долоні, говорить короткими реченнями".into(),
+        )
+        .unwrap();
+
+        let cards = run_bible(root.clone()).unwrap();
+        let mine: Vec<&EntityCardDto> = cards.iter().filter(|c| c.canonical == "Міра").collect();
+        assert_eq!(mine.len(), 1, "має бути рівно одна картка: {cards:?}");
+        assert_eq!(mine[0].source, "manual", "джерело — досьє автора");
+        assert_eq!(mine[0].entity_type, "character");
+        assert!(mine[0].aliases.contains(&"Мірочка".to_string()));
+
+        // перезапис по імені: той самий id; sync_aliases робить union —
+        // нові псевдоніми додаються, старі не втрачаються
+        let before_id = mine[0].entity_id;
+        add_dossier(
+            root.clone(),
+            "міра".into(), // регістр не важливий
+            vec!["Міра".into()],
+            "character".into(),
+            "нові нотатки".into(),
+        )
+        .unwrap();
+        let cards2 = run_bible(root.clone()).unwrap();
+        let mine2: Vec<&EntityCardDto> = cards2.iter().filter(|c| c.canonical == "Міра").collect();
+        assert_eq!(mine2.len(), 1, "перезапис не має плодити дублікати");
+        assert_eq!(mine2[0].entity_id, before_id, "перезапис по імені, без нового id");
+        assert!(mine2[0].aliases.contains(&"Міра".to_string()), "новий псевдонім додано");
+        assert!(mine2[0].aliases.contains(&"Мірочка".to_string()), "старі не втрачено (union)");
+    }
+
+    /// run_style: smoke — на порожньому/валідному проєкті повертає список без помилок.
+    #[test]
+    fn run_style_smoke() {
+        let root = tmp_root("style");
+        let _store = ProjectStore::init(std::path::Path::new(&root), "novelist-uk", "uk").expect("init");
+        std::fs::create_dir_all(std::path::Path::new(&root).join("manuscript")).unwrap();
+        std::fs::write(
+            std::path::Path::new(&root).join("manuscript/01.md"),
+            "---\ntitle: Глава один\n---\n\nДуже дуже довгий текст для перевірки стилю.",
+        )
+        .unwrap();
+        let alerts = run_style(root).unwrap();
+        // головне — команда працює і віддає валідний список (може бути порожнім)
+        let _ = alerts.len();
     }
 }

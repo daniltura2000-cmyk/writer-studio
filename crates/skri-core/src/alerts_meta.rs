@@ -16,7 +16,8 @@
 //!   graph-dangling-goto, var-orphan-check, var-dead-flag), animation.rs
 //!   (episode-structure, dialogue-streak, mute-test), notes.rs
 //!   (broken-links, orphan-notes, stale-notes), пресет journalist-uk
-//!   (pitch-followup, fact-unverified-check).
+//!   (pitch-followup, fact-unverified-check), style.rs (style-tautology,
+//!   style-repeat-word, style-double-space, style-dash-orphan).
 
 use serde::Serialize;
 
@@ -71,7 +72,8 @@ pub fn catalog_json() -> serde_json::Value {
 /// варто глянути (попередження/стеження, а не зламане).
 fn severity_of(kind: &str) -> &'static str {
     match kind {
-        "timeline-missing" | "mute-test" | "stale-notes" | "pitch-followup" => "tip",
+        "timeline-missing" | "mute-test" | "stale-notes" | "pitch-followup"
+        | "style-repeat-word" | "style-double-space" | "style-dash-orphan" => "tip",
         _ => "problem",
     }
 }
@@ -372,6 +374,54 @@ fn raw() -> Vec<Meta> {
             "Перечитайте нотатку, оновіть її або приберіть, якщо вона більше не актуальна.",
             "Re-read the note, update it, or drop it if it is no longer relevant.",
             "Перечитайте заметку, обновите её или уберите, если она больше не актуальна.",
+        ),
+        (
+            "style-tautology",
+            "Тавтологія: слово підряд",
+            "Tautology: same word in a row",
+            "Тавтология: слово подряд",
+            "Одне й те саме слово стоїть підряд або через одне слово в межах речення («масло масляне», «він він») — читається як огріх, а не як прийом.",
+            "The same word appears back to back or one word apart within a sentence (\"butter buttery\", \"he he\") — it reads as a slip, not a device.",
+            "Одно и то же слово стоит подряд или через одно слово внутри предложения («масло масляное», «он он») — читается как огрех, а не как приём.",
+            "Приберіть один із повторів або перепишіть речення; якщо це свідомий прийом, проігноруйте алерт.",
+            "Remove one of the repeats or rephrase the sentence; if it is intentional, ignore the alert.",
+            "Уберите один из повторов или перепишите предложение; если это сознательный приём, проигнорируйте алерт.",
+        ),
+        (
+            "style-repeat-word",
+            "Настирливий повтор у реченні",
+            "Insistent word repetition",
+            "Навязчивый повтор в предложении",
+            "Одне й те саме значуще слово з'являється три і більше разів в одному реченні — текст звучить монотонно.",
+            "The same meaningful word appears three or more times in one sentence — the text sounds monotonous.",
+            "Одно и то же значимое слово появляется три и более раз в одном предложении — текст звучит монотонно.",
+            "Замініть частину повторів синонімами або розбийте речення на кілька.",
+            "Replace some of the repeats with synonyms or split the sentence.",
+            "Замените часть повторов синонимами или разбейте предложение на несколько.",
+        ),
+        (
+            "style-double-space",
+            "Подвійні пробіли",
+            "Double spaces",
+            "Двойные пробелы",
+            "У тексті трапляються подвійні пробіли — у верстці й на вебплатформах вони виглядають як розрив.",
+            "The text contains double spaces — in typesetting and on web platforms they show up as gaps.",
+            "В тексте встречаются двойные пробелы — в вёрстке и на веб-платформах они выглядят как разрыв.",
+            "Знайдіть подвійний пробіл за offset у payload і приберіть зайвий пробіл.",
+            "Find the double space by its offset in the payload and remove the extra space.",
+            "Найдите двойной пробел по offset в payload и уберите лишний пробел.",
+        ),
+        (
+            "style-dash-orphan",
+            "Дефіс замість тире",
+            "Hyphen instead of a dash",
+            "Дефис вместо тире",
+            "У діалозі стоїть дефіс із пробілами («- Привіт») там, де укр/ру типографіка вимагає тире («— Привіт»).",
+            "A spaced hyphen (\"- Hi\") stands where Ukrainian/Russian typography expects an em dash (\"— Hi\").",
+            "В диалоге стоит дефис с пробелами («- Привет») там, где укр/ру типографика требует тире («— Привет»).",
+            "Це ПОРАДА: замініть на тире «—», якщо це не свідомий стилістичний вибір.",
+            "This is a TIP: replace with an em dash «—» unless it is a deliberate stylistic choice.",
+            "Это СОВЕТ: замените на тире «—», если это не сознательный стилистический выбор.",
         ),
     ]
 }

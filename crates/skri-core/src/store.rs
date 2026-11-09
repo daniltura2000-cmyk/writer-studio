@@ -236,7 +236,9 @@ impl ProjectStore {
             let existing: Option<(i64, i64)> = self
                 .conn
                 .query_row(
-                    "SELECT id, mtime FROM docs WHERE path = ?1",
+                    // COALESCE: bible-доки з find_or_create_doc мають NULL mtime —
+                    // трактуємо як «ніколи не індексувався» (−1), а не як падіння
+                    "SELECT id, COALESCE(mtime, -1) FROM docs WHERE path = ?1",
                     params![rel],
                     |r| Ok((r.get(0)?, r.get(1)?)),
                 )
@@ -355,4 +357,19 @@ impl ProjectStore {
     pub fn model_for(&self, task: &str) -> Result<Option<(String, bool)>> {
         crate::models::model_for(&self.root, task)
     }
+}
+
+/// Додати алерт у БД (спільний хелпер для всіх модулів, M10).
+pub fn add_alert(
+    conn: &Connection,
+    kind: &str,
+    entity_id: Option<i64>,
+    payload: &serde_json::Value,
+) -> Result<i64> {
+    conn.execute(
+        "INSERT INTO alerts(kind, entity_id, payload_json, created_at)
+         VALUES (?1, ?2, ?3, strftime('%s','now'))",
+        params![kind, entity_id, serde_json::to_string(payload)?],
+    )?;
+    Ok(conn.last_insert_rowid())
 }

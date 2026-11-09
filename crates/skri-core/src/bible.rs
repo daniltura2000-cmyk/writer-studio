@@ -51,6 +51,7 @@ pub fn sync_bible(store: &ProjectStore) -> Result<BibleReport> {
 
         let entity_id = upsert_manual_entity(conn, &name, &etype)?;
         report.entities += 1;
+        sync_aliases(conn, entity_id, &parsed.meta);
 
         let rel = path
             .strip_prefix(&store.root)
@@ -232,6 +233,140 @@ pub fn cards(store: &ProjectStore) -> Result<Vec<EntityCard>> {
         });
     }
     Ok(out)
+}
+
+/// Об'єднати aliases із frontmatter в entities.aliases_json (без дублів,
+/// порядок збережено) — щоб картка біблії одразу показувала варіанти імені.
+fn sync_aliases(
+    conn: &Connection,
+    entity_id: i64,
+    meta: &std::collections::BTreeMap<String, String>,
+) {
+    let Some(raw) = meta.get("aliases") else {
+        return;
+    };
+    let new_aliases: Vec<String> = raw
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if new_aliases.is_empty() {
+        return;
+    }
+    let current: String = conn
+        .query_row(
+            "SELECT aliases_json FROM entities WHERE id=?1",
+            params![entity_id],
+            |r| r.get(0),
+        )
+        .unwrap_or_else(|_| "[]".to_string());
+    let mut aliases: Vec<String> = serde_json::from_str(&current).unwrap_or_default();
+    for a in new_aliases {
+        if !aliases.iter().any(|x| x.eq_ignore_ascii_case(&a)) {
+            aliases.push(a);
+        }
+    }
+    if let Ok(json) = serde_json::to_string(&aliases) {
+        let _ = conn.execute(
+            "UPDATE entities SET aliases_json=?2 WHERE id=?1",
+            params![entity_id, json],
+        );
+    }
+}
+
+/// Ручна картка досьє (M10): створює/оновлює `bible/<slug>.md`.
+///
+/// Досьє одразу потрапляє в Story Bible після наступного `sync_bible`
+/// (картка з'являється як source=manual у EntityCard).
+#[derive(Debug, Clone)]
+pub struct ManualCard {
+    /// ім'я сутності (канонічна форма)
+    pub name: String,
+    /// варіанти написання (aliases)
+    pub aliases: Vec<String>,
+    /// тип сутності («персонаж», «локація», …)
+    pub kind: String,
+    /// вільні нотатки — тіло файлу
+    pub notes: String,
+}
+
+impl Default for ManualCard {
+    fn default() -> Self {
+        ManualCard {
+            name: String::new(),
+            aliases: Vec::new(),
+            kind: "персонаж".to_string(),
+            notes: String::new(),
+        }
+    }
+}
+
+/// Записати ручну картку досьє в `bible/`.
+///
+/// Формат файлу — frontmatter (name, aliases через кому, type) + нотатки
+/// у тілі. Існуючий файл з тим самим name (без регістру) ПЕРЕЗАПИСУЄТЬСЯ —
+/// це оновлення досьє, дублікатів не плодить.
+pub fn add_manual_card(root: &str, card: &ManualCard) -> std::io::Result<()> {
+    let bible_dir = std::path::Path::new(root).join("bible");
+    std::fs::create_dir_all(&bible_dir)?;
+
+    // оновлення: знайти існуючий файл із тим самим name (без регістру)
+    let mut target: Option<std::path::PathBuf> = None;
+    if let Ok(entries) = std::fs::read_dir(&bible_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+            let raw = match std::fs::read_to_string(&path) {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+            let parsed = crate::frontmatter::parse(&raw);
+            let existing = parsed.meta.get("name").cloned().unwrap_or_default();
+            if existing.eq_ignore_ascii_case(&card.name) {
+                target = Some(path);
+                break;
+            }
+        }
+    }
+
+    let path = target.unwrap_or_else(|| {
+        let slug = slugify(&card.name);
+        bible_dir.join(format!("{slug}.md"))
+    });
+
+    let mut md = String::new();
+    md.push_str("---\n");
+    md.push_str(&format!("name: {}\n", card.name));
+    if !card.aliases.is_empty() {
+        md.push_str(&format!("aliases: {}\n", card.aliases.join(", ")));
+    }
+    md.push_str(&format!("type: {}\n", card.kind));
+    md.push_str("---\n\n");
+    md.push_str(card.notes.trim());
+    md.push('\n');
+
+    std::fs::write(&path, md)
+}
+
+/// Ім'я → безпечне ім'я файла: літери/цифри лишаються (вкл. кирилицю),
+/// решта → '-', повзучі дефіси й крайові обрізаються.
+fn slugify(name: &str) -> String {
+    let mut slug = String::new();
+    for c in name.chars() {
+        if c.is_alphanumeric() {
+            slug.push(c);
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_matches('-').to_lowercase();
+    if slug.is_empty() {
+        "card".to_string()
+    } else {
+        slug
+    }
 }
 
 /// Звіт синхронізації біблії.

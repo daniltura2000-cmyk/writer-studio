@@ -1,7 +1,7 @@
 //! Writer Studio CLI (`skri`): init / index / bible / drift / preset / search.
 //! Локально, безкоштовно, українською.
 
-use skri_core::{bible, drift, indexer, models, presets, scrub, sync, ProjectStore};
+use skri_core::{bible, drift, indexer, models, presets, scrub, style, sync, ProjectStore};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -82,6 +82,9 @@ fn usage() {
          \x20 skri sync status <папка>                          векторні годинники по доках + журнал синку\n\
          \x20 skri sync export <папка> <вихід.json>             пакет обміну (флешка/спільна папка)\n\
          \x20 skri sync import <папка> <пакет.json>             злити пакет у локальний проєкт\n\
+         \x20 skri style <папка>                                  перевірки стилю і грамотності (тавтологія, повтори, пробіли, тире)\n\
+         \x20 skri dossier add <папка> <ім'я> [--aliases а,б] [--kind персонаж] [--notes файл]  ручна картка досьє в біблію\n\
+         \x20 skri dossier list <папка>                            картки досьє (Story Bible)\n\
          \x20 skri preset compose <назва> <kind:preset...>         зібрати свій пресет з ассетів"
 
     );
@@ -117,6 +120,8 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "notes" => cmd_notes(&args[1..])?,
         "scrub" => cmd_scrub(&args[1..])?,
         "sync" => cmd_sync(&args[1..])?,
+        "style" => cmd_style(args)?,
+        "dossier" => cmd_dossier(&args[1..])?,
         _ => usage(),
     }
     Ok(())
@@ -1701,6 +1706,125 @@ fn cmd_sync(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 "✖ невідома підкоманда sync: {:?} (status|export|import)",
                 other.unwrap_or("")
             );
+            exit(2);
+        }
+    }
+}
+
+// --- M10: перевірки стилю і ручні досьє (bible) ---
+
+fn cmd_style(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use skri_core::alerts_meta;
+    let dir = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| usage_exit("style: вкажіть папку проєкту"));
+    let store = open_at(&dir);
+    store.reindex()?;
+    let alerts = style::run_style_checks(&dir)?;
+    if alerts.is_empty() {
+        println!("✔ перевірки стилю чисті: тавтологій, настирливих повторів, подвійних пробілів і дефісів-сиріт немає");
+        return Ok(());
+    }
+    println!("⚠ знахідок стилю: {}", alerts.len());
+    for a in &alerts {
+        let meta = alerts_meta::catalog()
+            .into_iter()
+            .find(|m| m.kind == a.kind);
+        let title = meta
+            .as_ref()
+            .map(|m| m.title_uk.clone())
+            .unwrap_or_else(|| a.kind.clone());
+        let severity = meta.as_ref().map(|m| m.severity).unwrap_or("tip");
+        println!("\n[{severity}] {title} (#{id})", id = a.id);
+        if let Some(m) = a.payload.get("message").and_then(|m| m.as_str()) {
+            println!("  ● {m}");
+        }
+        if let Some(d) = a.payload.get("doc").and_then(|m| m.as_str()) {
+            let pos = a.payload.get("char_start").and_then(|c| c.as_i64()).unwrap_or(0);
+            println!("    де: {d} @offset {pos}");
+        }
+        if let Some(s) = a.payload.get("sentence").and_then(|m| m.as_str()) {
+            if !s.is_empty() {
+                println!("    речення: {}", truncate(s, 90));
+            }
+        }
+    }
+    let problems = alerts.len();
+    println!("\nзведення: {} знахідок (style-tautology = problem, решта — поради)", problems);
+    Ok(())
+}
+
+fn cmd_dossier(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use skri_core::bible::ManualCard;
+    match rest.first().map(String::as_str) {
+        Some("add") => {
+            let dir = rest
+                .get(1)
+                .cloned()
+                .unwrap_or_else(|| usage_exit("dossier add: вкажіть папку"));
+            let name = rest
+                .get(2)
+                .cloned()
+                .unwrap_or_else(|| usage_exit("dossier add: вкажіть ім'я сутності"));
+            let aliases: Vec<String> = flag(rest, "--aliases")
+                .map(|s| {
+                    s.split(',')
+                        .map(|t| t.trim().to_string())
+                        .filter(|t| !t.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let kind = flag(rest, "--kind").unwrap_or_else(|| "персонаж".into());
+            let notes = match flag(rest, "--notes") {
+                Some(file) => std::fs::read_to_string(&file)
+                    .unwrap_or_else(|e| usage_exit(&format!("dossier add: не вдалося прочитати --notes {file}: {e}"))),
+                None => String::new(),
+            };
+            let card = ManualCard {
+                name,
+                aliases,
+                kind: kind.clone(),
+                notes,
+            };
+            bible::add_manual_card(&dir, &card)?;
+            // одразу показати в біблії
+            let store = open_at(&dir);
+            let rep = bible::sync_bible(&store)?;
+            println!(
+                "✔ досьє «{}» → bible/ (type: {kind}); біблія: сутностей {}, тверджень {}",
+                card.name, rep.entities, rep.assertions
+            );
+            Ok(())
+        }
+        Some("list") => {
+            let dir = rest
+                .get(1)
+                .map(String::as_str)
+                .unwrap_or_else(|| usage_exit("dossier list: вкажіть папку"));
+            let store = open_at(dir);
+            let cards = bible::cards(&store)?;
+            if cards.is_empty() {
+                println!("досьє порожнє — skri dossier add <папка> <ім'я>");
+                return Ok(());
+            }
+            for c in cards {
+                println!(
+                    "● {} [{}] — {} згадок",
+                    c.canonical, c.entity_type, c.mention_total
+                );
+                if !c.aliases.is_empty() {
+                    println!("  варіанти: {}", c.aliases.join(", "));
+                }
+                for (attr, value, status) in &c.assertions {
+                    let mark = if status == "conflict" { "⚠" } else { "•" };
+                    println!("  {mark} {attr}: {value}");
+                }
+            }
+            Ok(())
+        }
+        other => {
+            eprintln!("✖ невідома підкоманда dossier: {:?} (add|list)", other.unwrap_or(""));
             exit(2);
         }
     }

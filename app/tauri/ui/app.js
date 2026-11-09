@@ -43,11 +43,34 @@ const I18N = {
     t_bible: "Персонажі та світ",
     bible_sub: "Програма сама збирає відомості про персонажів і світ з твого тексту: імена, варіанти написання, згадані факти.",
     btn_rescan: "Перечитати рукопис",
-    no_entities: "Ще нічого не знайдено. Поклади глави в manuscript/ і натисни «Перечитати рукопис».",
+    no_entities: "Тут поки порожньо. Натисни «＋ Додати досьє», щоб створити картку вручну, або поклади глави в manuscript/ і натисни «Перечитати рукопис».",
     mentions: ["згадка", "згадки", "згадок"],
     also_known: "також зустрічається як",
     found_in: "зустрічається у",
     facts: "факти з тексту:",
+    // досьє автора
+    dossier_hint_main: "Створи досьє на персонажа — програма стежитиме, щоб його описи в усіх главах не суперечили один одному.",
+    dossier_hint_auto: "Нижче — те, що програма знайшла в тексті сама.",
+    btn_add_dossier: "＋ Додати досьє",
+    dos_new: "Нове досьє",
+    dos_edit: "Редагувати досьє",
+    dos_name: "Ім'я:",
+    dos_name_ph: "Наприклад: Міра Велан",
+    dos_aliases: "Псевдоніми (через кому):",
+    dos_aliases_ph: "Наприклад: Міра, Мірочка",
+    dos_kind: "Тип:",
+    kind_character: "Персонаж",
+    kind_location: "Локація",
+    kind_item: "Предмет",
+    kind_other: "Інше",
+    dos_notes: "Що важливо стежити:",
+    dos_notes_ph: "Зріст, шрами, характер, як говорить…",
+    dos_save: "Зберегти досьє",
+    dos_cancel: "Скасувати",
+    dos_need_name: "Вкажи ім'я.",
+    src_manual: "Досьє автора",
+    src_auto: "Знайдено в тексті",
+    btn_edit_card: "Редагувати",
     // алерти
     t_alerts: "Знайдені проблеми",
     alerts_sub: "Ось що програма помітила у рукописі. Синім — поради, червоним — те, що варто виправити.",
@@ -201,11 +224,33 @@ const I18N = {
     t_bible: "Characters & world",
     bible_sub: "The app collects facts about your characters and world from the text by itself: names, spellings, mentioned details.",
     btn_rescan: "Re-read manuscript",
-    no_entities: "Nothing found yet. Put chapters into manuscript/ and click “Re-read manuscript”.",
+    no_entities: "Nothing here yet. Click “＋ Add dossier” to create a card by hand, or put chapters into manuscript/ and click “Re-read manuscript”.",
     mentions: ["mention", "mentions", "mentions"],
     also_known: "also appears as",
     found_in: "appears in",
     facts: "facts from the text:",
+    dossier_hint_main: "Create a character dossier — the app will make sure its descriptions never contradict each other across chapters.",
+    dossier_hint_auto: "Below — what the app found in the text by itself.",
+    btn_add_dossier: "＋ Add dossier",
+    dos_new: "New dossier",
+    dos_edit: "Edit dossier",
+    dos_name: "Name:",
+    dos_name_ph: "For example: Mira Velan",
+    dos_aliases: "Aliases (comma-separated):",
+    dos_aliases_ph: "For example: Mira, Mirka",
+    dos_kind: "Type:",
+    kind_character: "Character",
+    kind_location: "Location",
+    kind_item: "Item",
+    kind_other: "Other",
+    dos_notes: "What to keep track of:",
+    dos_notes_ph: "Height, scars, temperament, how they speak…",
+    dos_save: "Save dossier",
+    dos_cancel: "Cancel",
+    dos_need_name: "Enter a name.",
+    src_manual: "Author's dossier",
+    src_auto: "Found in the text",
+    btn_edit_card: "Edit",
     t_alerts: "Found issues",
     alerts_sub: "What the app noticed in your manuscript. Blue — advice, red — worth fixing.",
     filter_all: "All",
@@ -350,11 +395,33 @@ const I18N = {
     t_bible: "Персонажи и мир",
     bible_sub: "Программа сама собирает сведения о персонажах и мире из вашего текста: имена, варианты написания, упомянутые факты.",
     btn_rescan: "Перечитать рукопись",
-    no_entities: "Пока ничего не найдено. Положите главы в manuscript/ и нажмите «Перечитать рукопись».",
+    no_entities: "Здесь пока пусто. Нажмите «＋ Добавить досье», чтобы создать карточку вручную, или положите главы в manuscript/ и нажмите «Перечитать рукопись».",
     mentions: ["упоминание", "упоминания", "упоминаний"],
     also_known: "также встречается как",
     found_in: "встречается в",
     facts: "факты из текста:",
+    dossier_hint_main: "Создайте досье на персонажа — программа будет следить, чтобы его описания во всех главах не противоречили друг другу.",
+    dossier_hint_auto: "Ниже — то, что программа нашла в тексте сама.",
+    btn_add_dossier: "＋ Добавить досье",
+    dos_new: "Новое досье",
+    dos_edit: "Редактировать досье",
+    dos_name: "Имя:",
+    dos_name_ph: "Например: Мира Велан",
+    dos_aliases: "Псевдонимы (через запятую):",
+    dos_aliases_ph: "Например: Мира, Мирочка",
+    dos_kind: "Тип:",
+    kind_character: "Персонаж",
+    kind_location: "Локация",
+    kind_item: "Предмет",
+    kind_other: "Другое",
+    dos_notes: "За чем важно следить:",
+    dos_notes_ph: "Рост, шрамы, характер, как говорит…",
+    dos_save: "Сохранить досье",
+    dos_cancel: "Отмена",
+    dos_need_name: "Укажите имя.",
+    src_manual: "Досье автора",
+    src_auto: "Найдено в тексте",
+    btn_edit_card: "Редактировать",
     t_alerts: "Найденные проблемы",
     alerts_sub: "Вот что программа заметила в рукописи. Синим — советы, красным — то, что стоит исправить.",
     filter_all: "Все",
@@ -807,13 +874,24 @@ window.addEventListener("keydown", (e) => {
    ============================================================ */
 let lastCards = null;
 
+// канонічні типи досьє → ключі i18n (невідомі типи показуються як є)
+const KIND_I18N = { character: "kind_character", location: "kind_location", item: "kind_item", other: "kind_other" };
+// застарілі/авто-типи українською → канонічні (для префіллу форми редагування)
+const KIND_MAP = { "персонаж": "character", "локація": "location", "предмет": "item", "інше": "other" };
+
+function kindLabel(s) {
+  return KIND_I18N[s] ? t(KIND_I18N[s]) : s;
+}
+
 function renderBible(cards) {
   lastCards = cards;
   $("cards").innerHTML =
     cards
       .map(
-        (c) => `<div class="card">
-      <span class="name">${esc(c.canonical)}</span><span class="type">${esc(c.entity_type)}</span>
+        (c) => {
+          const manual = c.source === "manual";
+          return `<div class="card ${manual ? "manual" : ""}">
+      <span class="name">${esc(c.canonical)}</span><span class="type">${esc(kindLabel(c.entity_type))}</span><span class="src-badge ${manual ? "src-manual" : "src-auto"}">${esc(t(manual ? "src_manual" : "src_auto"))}</span>
       <div class="meta">${c.mention_total} ${plural(c.mention_total, I18N[lang].mentions)}${c.aliases.length ? " · " + esc(t("also_known")) + ": " + esc(c.aliases.join(", ")) : ""}</div>
       ${c.docs.length ? `<div class="meta">${esc(t("found_in"))}: ${c.docs.map((d) => `${esc(d.path)}×${d.mentions}`).join(", ")}</div>` : ""}
       ${
@@ -823,10 +901,18 @@ function renderBible(cards) {
             "</ul>"
           : ""
       }
-    </div>`
+      ${manual ? `<div class="card-actions"><button class="compact" data-edit="${c.entity_id}">✎ ${esc(t("btn_edit_card"))}</button></div>` : ""}
+    </div>`;
+        }
       )
       .join("") ||
     `<div class="empty"><span class="ico">👥</span>${esc(t("no_entities"))}</div>`;
+  $("cards").querySelectorAll("button[data-edit]").forEach((b) => {
+    b.onclick = () => {
+      const card = (lastCards || []).find((c) => c.entity_id === Number(b.dataset.edit));
+      if (card) openDossierForm(card);
+    };
+  });
 }
 
 async function loadBible() {
@@ -834,6 +920,51 @@ async function loadBible() {
   $("cards").dataset.loaded = "1";
   renderBible(cards);
 }
+
+/* --- досьє автора: форма створення/редагування --- */
+let dosEditing = null; // canonical імені картки при редагуванні, null при створенні
+
+function openDossierForm(card) {
+  if (!root) { showSetup(false); return; }
+  dosEditing = card ? card.canonical : null;
+  $("dosTitle").textContent = card ? t("dos_edit") : t("dos_new");
+  $("dosName").value = card ? card.canonical : "";
+  $("dosAliases").value = card ? card.aliases.join(", ") : "";
+  const sel = $("dosKind");
+  const kind = card ? KIND_MAP[card.entity_type] || card.entity_type : "character";
+  if ([...sel.options].some((o) => o.value === kind)) sel.value = kind;
+  else if (KIND_I18N[kind]) sel.value = kind;
+  else sel.value = "other";
+  $("dosNotes").value = "";
+  $("dosMsg").textContent = "";
+  $("dosMsg").className = "note";
+  $("dossierForm").classList.remove("hidden");
+  $("dosName").focus();
+}
+
+$("btnAddDossier").onclick = () => openDossierForm(null);
+
+$("dosSave").onclick = async () => {
+  if (!root) { showSetup(false); return; }
+  const name = $("dosName").value.trim();
+  if (!name) { $("dosMsg").textContent = t("dos_need_name"); $("dosMsg").className = "note err"; return; }
+  const aliases = $("dosAliases").value.split(",").map((s) => s.trim()).filter(Boolean);
+  const kind = $("dosKind").value;
+  const notes = $("dosNotes").value;
+  $("dosSave").disabled = true;
+  try {
+    await cmd("add_dossier", { name, aliases, kind, notes });
+    $("dossierForm").classList.add("hidden");
+    dosEditing = null;
+    await loadBible(); // список карток після reindex+sync_bible
+  } catch { /* помилку вже показано в cmd() */ }
+  finally { $("dosSave").disabled = false; }
+};
+
+$("dosCancel").onclick = () => {
+  $("dossierForm").classList.add("hidden");
+  dosEditing = null;
+};
 
 $("btnIndex").onclick = async () => {
   await cmd("run_index");
@@ -859,6 +990,10 @@ const FALLBACK_META = [
   ["stat-error", "problem", "Статистика стала від'ємною", "У персонажа hp/ресурс нижче нуля.", "Виправте тег [stat: ...]."],
   ["episode-check", "tip", "Зауваження до структури епізоду", "Відхилення від схеми 20-хвилинного епізоду.", "Прочитайте зауваження."],
   ["ink-external-change", "tip", "Файл діалогів змінено ззовні", "Файл .ink/.yarn змінився після імпорту.", "Імпортуйте файл знову."],
+  ["style-tautology", "tip", "Тавтологія: слово підряд", "Одне й те саме слово стоїть підряд або через одне слово в межах речення.", "Приберіть один із повторів або перепишіть речення."],
+  ["style-repeat-word", "tip", "Настирливий повтор у реченні", "Одне й те саме значуще слово з'являється три і більше разів в одному реченні.", "Замініть частину повторів синонімами або розбийте речення."],
+  ["style-double-space", "tip", "Подвійні пробіли", "У тексті трапляються подвійні пробіли — у верстці вони виглядають як розрив.", "Знайдіть подвійний пробіл за offset у payload і приберіть зайвий пробіл."],
+  ["style-dash-orphan", "tip", "Дефіс замість тире", "У діалозі стоїть дефіс із пробілами там, де типографіка вимагає тире.", "Замініть на тире «—», якщо це не свідомий стилістичний вибір."],
 ].map(([kind, severity, title, explain, action]) => ({ kind, severity, title_uk: title, explain_uk: explain, action_uk: action }));
 
 let alertMeta = {};   // kind -> {severity, title, explain, action}
@@ -986,6 +1121,9 @@ $("btnCheck").onclick = async () => {
     await loadMeta();
     const r = await cmd("run_checks");
     const alerts = r.alerts || [];
+    // style-перевірки — послідовно після основних валідаторів
+    const sr = await cmdq("run_style");
+    if (sr.err == null && Array.isArray(sr.ok)) alerts.push(...sr.ok);
     const problems = alerts.filter((a) => metaFor(a.kind).severity === "problem").length;
     const tips = alerts.length - problems;
     let sum = t("sum_checks", { d: r.docs, dw: plural(r.docs, I18N[lang].chapters_w), w: r.words, ww: plural(r.words, I18N[lang].words), e: r.entities });

@@ -6,10 +6,11 @@
 //! у drift-детекції — опечатка при ПЕРШІЙ згадці імені теж має ловитись.
 
 use crate::drift;
+use crate::stopwords;
 use crate::store::ProjectStore;
 use crate::Result;
 use rusqlite::{params, OptionalExtension};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Токен з байтовими offsets у тілі документа.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,7 +37,7 @@ pub struct Candidate {
     pub total_count: usize,
     /// згадок НЕ на початку речення (надійніший сигнал власної назви)
     pub non_initial: usize,
-    /// сильний: non_initial ≥ 1 або total ≥ 2; слабкий — інакше
+    /// сильний: non_initial ≥ 1, total ≥ 3 або пара «Ім'я Прізвище»; слабкий — інакше
     pub strong: bool,
 }
 
@@ -57,32 +58,27 @@ pub struct Extraction {
     pub mentions: Vec<Mention>,
 }
 
-// --- Стоп-слова: UA + EN (мінімум, розширюється пресетами) ---
-const STOPWORDS: &[&str] = &[
-    // укр.
-    "а", "б", "без", "би", "був", "була", "було", "були", "бути", "в", "вже", "він", "вона",
-    "воно", "все", "всі", "всього", "де", "для", "до", "є", "й", "і", "із", "або", "же", "з",
-    "за", "зі", "як", "який", "яка", "яке", "коли", "хто", "що", "чого", "так", "такий", "там",
-    "той", "та", "те", "ті", "ти", "ви", "у", "це", "цей", "ця", "ці", "її", "їх", "його",
-    "їм", "ним", "нею", "ми", "вони", "я", "мене", "мені", "мій", "моя", "не", "ні",
-    "ну", "про", "під", "по", "при", "сьогодні", "тоді", "теж", "тільки", "тут", "хоч",
-    "чи", "через", "щоб", "ось", "дуже", "ще", "мабуть", "може", "можна", "коли", "дуже",
-    "розділ", "частина", "глава",
-    // англ.
-    "the", "a", "an", "and", "or", "but", "if", "of", "to", "in", "on", "at", "for", "with",
-    "from", "by", "is", "are", "was", "were", "be", "been", "it", "its", "this", "that", "he",
-    "she", "they", "them", "his", "her", "their", "i", "you", "we", "my", "your", "our", "as",
-    "not", "no", "so", "do", "did", "has", "have", "had", "will", "would", "can", "could",
-    "there", "here", "when", "where", "who", "what", "why", "how", "all", "any", "each", "then",
-    "than", "into", "over", "after", "before", "about", "chapter", "book",
-];
+// --- Стоп-слова ---
+// M10: великі списки uk/ru/en винесені в окремий модуль `stopwords.rs`
+// (кожен список ≥ 100 слів: вводні, займенники, прислівники, частки,
+// дієслова мовлення). Порівняння — у нижньому регістрі після нормалізації.
+
+/// Сильний кандидат: non_initial згадок ≥ 1 АБО total ≥ 3 (підвищено з 2
+/// у M10 — одиночне слово, згадане двічі, ще не персонаж).
+const STRONG_TOTAL: usize = 3;
 
 fn is_stopword(t: &str) -> bool {
     let lower = t.to_lowercase();
     lower
         .split_whitespace()
-        .all(|w| STOPWORDS.contains(&w))
-        || STOPWORDS.contains(&lower.as_str())
+        .all(|w| stopwords::is_stopword(w))
+        || stopwords::is_stopword(&lower)
+}
+
+/// Публічний фільтр службових слів для інших модулів (наприклад,
+/// style.rs відфільтровує службові слова з repeat-перевірки).
+pub fn is_stopword_word(word_lower: &str) -> bool {
+    stopwords::is_stopword(word_lower)
 }
 
 /// Чи символ «словесний» (буква/цифра, вкл. кирилицю) — для внутрішніх апострофів/дефісів.
@@ -97,7 +93,9 @@ pub fn tokenize(text: &str) -> Vec<Token> {
     let mut i = 0usize;
     while i < bytes.len() {
         let c = text[i..].chars().next().unwrap();
-        if !word_char(c) {
+        // дефіс не може ПОЧИНАТИ токен (інакше «- Привет» робило «Привет»
+        // non-initial-згадкою і сильним кандидатом); всередині слова — можно.
+        if !word_char(c) || c == '-' || c == '‑' {
             i += c.len_utf8();
             continue;
         }
@@ -174,15 +172,43 @@ pub fn count_words(text: &str) -> usize {
 ///
 /// Сигнали власної назви:
 /// 1) велика літера НЕ на початку речення;
-/// 2) частотність ≥ 2;
+/// 2) частотність ≥ 3 (для одиночних слів);
 /// 3) пара «Ім'я Прізвище» (дві великі підряд).
+///
+/// Правила M10 (фікс «Казалось/Почему»):
+/// - стоп-слова uk/ru/en (модуль [`crate::stopwords`]) не кандидати;
+/// - слово, що зустрічається ЛИШЕ на початку речення і де-небудь у тексті
+///   нижнім регістром, — не кандидат (це звичайне слово, capitalized тільки
+///   через позицію в реченні).
 /// Усе інше велике одиночне — слабкий кандидат (лише для drift-детекції).
 pub fn extract_candidates(body: &str) -> Extraction {
     let mut candidates: HashMap<String, Candidate> = HashMap::new();
     let mut mentions: Vec<Mention> = Vec::new();
 
-    for sent in sentences(body) {
-        let toks = tokenize(&sent.text);
+    // Двопрохідний скан: спершу збираємо всі токени (з offsetами), щоб
+    // знати, які форми зустрічаються нижнім регістром десь у тексті.
+    let sents: Vec<(String, usize, Vec<Token>)> = sentences(body)
+        .into_iter()
+        .map(|s| {
+            let toks = tokenize(&s.text);
+            (s.text, s.start, toks)
+        })
+        .collect();
+
+    let mut lower_seen: HashSet<String> = HashSet::new();
+    for (_, _, toks) in &sents {
+        for tok in toks {
+            if let Some(first) = tok.text.chars().next() {
+                if first.is_alphabetic() && first.is_lowercase() {
+                    lower_seen.insert(tok.text.to_lowercase());
+                }
+            }
+        }
+    }
+
+    let mut pair_keys: HashSet<String> = HashSet::new();
+
+    for (sent_text, sent_start, toks) in &sents {
         let mut i = 0usize;
         while i < toks.len() {
             let tok = &toks[i];
@@ -191,49 +217,63 @@ pub fn extract_candidates(body: &str) -> Extraction {
                 continue;
             }
             // пара «Ім'я Прізвище»?
-            if i + 1 < toks.len() && starts_upper(&toks[i + 1].text) && !is_stopword(&tok.text)
+            if i + 1 < toks.len()
+                && starts_upper(&toks[i + 1].text)
+                && !is_stopword(&tok.text)
             {
                 let pair = format!("{} {}", tok.text, toks[i + 1].text);
-                let abs_start = sent.start + tok.start;
-                let abs_end = sent.start + toks[i + 1].end;
+                let abs_start = sent_start + tok.start;
+                let abs_end = sent_start + toks[i + 1].end;
+                let key = pair.to_lowercase();
+                pair_keys.insert(key.clone());
                 // пара «Ім'я Прізвище» — завжди кандидат (signal сильний)
-                let non_initial = true;
                 register(
                     &mut candidates,
                     &mut mentions,
                     &pair,
                     abs_start,
                     abs_end,
-                    sent.text.clone(),
-                    non_initial,
+                    sent_text.clone(),
+                    true,
                 );
                 i += 2;
                 continue;
             }
             if !is_stopword(&tok.text) {
-                let abs_start = sent.start + tok.start;
-                let abs_end = sent.start + tok.end;
-                let non_initial = i > 0;
+                let lower = tok.text.to_lowercase();
+                let initial = i == 0;
+                // ГОЛОВНИЙ детектор «Казалось»: слово з великої ТІЛЬКИ тому,
+                // що стоїть на початку речення, а нижнім регістром воно
+                // зустрічається десь у тексті → це не власна назва.
+                if initial && lower_seen.contains(&lower) {
+                    i += 1;
+                    continue;
+                }
+                let abs_start = sent_start + tok.start;
+                let abs_end = sent_start + tok.end;
                 register(
                     &mut candidates,
                     &mut mentions,
                     &tok.text,
                     abs_start,
                     abs_end,
-                    sent.text.clone(),
-                    non_initial,
+                    sent_text.clone(),
+                    !initial,
                 );
             }
             i += 1;
         }
     }
 
-    // сила кандидата: згадка не на початку речення АБО згадок ≥ 2.
+    // сила кандидата: згадка не на початку речення АБО згадок ≥ 3 (M10:
+    // поріг піднято з 2); пара «Ім'я Прізвище» — завжди сильна.
     // Слабкі не викидаємо — вони йдуть у БД як `auto-weak` для drift-детекції.
     let mut out: Vec<Candidate> = candidates
         .into_values()
         .map(|mut c| {
-            c.strong = c.non_initial >= 1 || c.total_count >= 2;
+            c.strong = c.non_initial >= 1
+                || c.total_count >= STRONG_TOTAL
+                || pair_keys.contains(&c.canonical.to_lowercase());
             c
         })
         .collect();

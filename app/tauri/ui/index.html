@@ -117,7 +117,40 @@
             <h3 data-i18n="t_bible"></h3>
             <div class="pane-sub" data-i18n="bible_sub"></div>
           </div>
-          <div class="row"><button id="btnIndex" class="compact" data-i18n="btn_rescan"></button></div>
+          <div class="dossier-hint">
+            <div class="line" data-i18n="dossier_hint_main"></div>
+            <div class="line dim" data-i18n="dossier_hint_auto"></div>
+          </div>
+          <div class="row">
+            <button id="btnAddDossier" class="primary" data-i18n="btn_add_dossier"></button>
+            <button id="btnIndex" class="compact" data-i18n="btn_rescan"></button>
+          </div>
+          <!-- Форма досьє (створення/редагування) -->
+          <div id="dossierForm" class="dossier-form hidden">
+            <h3 id="dosTitle"></h3>
+            <label class="fieldline tight"><span data-i18n="dos_name"></span>
+              <input id="dosName" type="text" data-i18n-ph="dos_name_ph">
+            </label>
+            <label class="fieldline tight"><span data-i18n="dos_aliases"></span>
+              <input id="dosAliases" type="text" data-i18n-ph="dos_aliases_ph">
+            </label>
+            <label class="fieldline tight"><span data-i18n="dos_kind"></span>
+              <select id="dosKind">
+                <option value="character" data-i18n="kind_character"></option>
+                <option value="location" data-i18n="kind_location"></option>
+                <option value="item" data-i18n="kind_item"></option>
+                <option value="other" data-i18n="kind_other"></option>
+              </select>
+            </label>
+            <label class="fieldline tight"><span data-i18n="dos_notes"></span>
+              <textarea id="dosNotes" rows="4" data-i18n-ph="dos_notes_ph"></textarea>
+            </label>
+            <div id="dosMsg" class="note"></div>
+            <div class="row">
+              <button id="dosSave" class="primary" data-i18n="dos_save"></button>
+              <button id="dosCancel" data-i18n="dos_cancel"></button>
+            </div>
+          </div>
           <div id="cards" class="cards-stacked"></div>
         </div>
 
