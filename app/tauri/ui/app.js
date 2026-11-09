@@ -10,6 +10,8 @@
 const invoke = window.__TAURI__?.core?.invoke;
 const $ = (id) => document.getElementById(id);
 let root = localStorage.getItem("skri.root") || "";
+let projGen = 0; // покоління проєкту: +1 при кожному відкритті (QA-10 гонка)
+let gotoRegistry = []; // алерт → кнопка «Перейти» (для цитати при переході)
 
 /* ============================================================
    I18N — словник інтерфейсу
@@ -742,6 +744,7 @@ function resetProjectState() {
   currentDoc = null;
   dirty = false;
   editor.value = "";
+  updateCounts(); // QA-10: лічильник «6 слів» попередньої глави не може залишатись
   $("docTitle").textContent = "";
   $("docMeta").textContent = "";
   $("saveState").textContent = "";
@@ -774,6 +777,7 @@ function resetProjectState() {
 
 async function openProject(path, quiet = false) {
   root = path;
+  projGen++; // QA-10: stale-результати перевірок попереднього проєкту ігноруються
   localStorage.setItem("skri.root", root);
   // спершу скидаємо стан СТАРОГО проєкту — до будь-яких запитів
   resetProjectState();
@@ -1151,15 +1155,11 @@ function byteIndexToCharIndex(str, byteOffset) {
   return lo;
 }
 
-// Відкрити главу алерту і підсвітити рядок з offset на 2 секунди:
-// scrollIntoView-подібний скрол textarea + жовтий flash поверх рядка.
-function flashLineAt(byteOffset) {
+// Підсвітити рядок textarea (0-based) на 2 секунди зі скролом до нього.
+function flashLineNumber(lineNo) {
   const ta = $("editor");
   const text = ta.value;
-  if (!text) return;
-  const ci = Math.min(byteIndexToCharIndex(text, byteOffset), Math.max(text.length - 1, 0));
-  const lineStart = text.lastIndexOf("\n", Math.max(ci - 1, 0)) + 1;
-  const lineNo = (text.slice(0, lineStart).match(/\n/g) || []).length;
+  if (!text || lineNo < 0) return;
   const cs = getComputedStyle(ta);
   const lineHeight = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.7 || 27;
   const padTop = parseFloat(cs.paddingTop) || 0;
@@ -1179,8 +1179,25 @@ function flashLineAt(byteOffset) {
 async function gotoAlert(doc, charStart) {
   if (!doc) return;
   try {
+    const a = gotoAlert.alert; // цитата для надійного пошуку рядка
     await openDoc(doc);
-    if (charStart != null) flashLineAt(charStart);
+    // QA-05: offset може не збігатися (заголовки/основа відліку) — тому
+    // основний шлях: знайти ЦИТАТУ алерту в тілі і підсвітити її рядок.
+    let line = -1;
+    const q = a ? String(a.payload?.sentence || a.payload?.marker || a.payload?.word || a.payload?.canonical || "").trim() : "";
+    if (q.length >= 4) {
+      const idx = editor.value.indexOf(q);
+      if (idx >= 0) {
+        const lineStart = editor.value.lastIndexOf("\n", Math.max(idx - 1, 0)) + 1;
+        line = (editor.value.slice(0, lineStart).match(/\n/g) || []).length;
+      }
+    }
+    if (line < 0 && charStart != null) {
+      const ci = Math.min(byteIndexToCharIndex(editor.value, charStart), Math.max(editor.value.length - 1, 0));
+      const lineStart = editor.value.lastIndexOf("\n", Math.max(ci - 1, 0)) + 1;
+      line = (editor.value.slice(0, lineStart).match(/\n/g) || []).length;
+    }
+    if (line >= 0) flashLineNumber(line);
   } catch { /* помилку вже показано в cmd() */ }
 }
 
@@ -1236,17 +1253,20 @@ function instanceHtml(a) {
   } else {
     rows = `<div class="v">${esc(fmtVal("", a.payload))}</div>`;
   }
-  // Кнопка «Перейти» — лише якщо у payload є і глава, і offset (QA-05)
+  // Кнопка «Перейти» — лише якщо у payload є і глава, і offset (QA-05);
+  // індекс у gotoRegistry дозволяє дістати ЦІЛИЙ алерт (цитату) в onclick
   const doc = alertDoc(a);
   const off = alertOffset(a);
   let gotoHtml = "";
   if (doc && off != null) {
     const q = quoteOf(a);
+    gotoRegistry.push(a);
+    const gi = gotoRegistry.length - 1;
     gotoHtml =
       `<div class="agoto">` +
       (q ? `<span class="q">«${esc(q)}»</span>` : "") +
       `<span class="where">${esc(doc)}</span>` +
-      `<button class="compact" data-goto-doc="${esc(doc)}" data-goto-off="${off}">${esc(t("goto"))} ↦</button>` +
+      `<button class="compact" data-goto-doc="${esc(doc)}" data-goto-off="${off}" data-gi="${gi}">${esc(t("goto"))} ↦</button>` +
       `</div>`;
   }
   return `<div class="ainstance">${rows || "—"}${gotoHtml}</div>`;
@@ -1265,6 +1285,7 @@ function metaFor(kind) {
 
 function renderAlerts() {
   if (!lastAlerts) return;
+  gotoRegistry = []; // реєстр кнопок «Перейти» перебудовується щоразу
   const f = $("alertFilter").value;
   const list = f ? lastAlerts.filter((a) => a.kind === f) : lastAlerts;
   // QA-07: бейдж = фільтр = підсумок рахують ОДНАКОВО — по відфільтрованому
@@ -1331,7 +1352,10 @@ function renderAlerts() {
     kinds.map((k) => `<option value="${esc(k)}" ${k === f ? "selected" : ""}>${esc(metaFor(k).title)} (${byKind.get(k).length})</option>`).join("");
   // кнопки «Перейти» (глава + offset), «Прийняти варіант», «Ігнорувати»
   $("alertList").querySelectorAll("button[data-goto-doc]").forEach((b) => {
-    b.onclick = () => gotoAlert(b.dataset.gotoDoc, Number(b.dataset.gotoOff));
+    b.onclick = () => {
+      gotoAlert.alert = gotoRegistry[Number(b.dataset.gi)] || null;
+      gotoAlert(b.dataset.gotoDoc, Number(b.dataset.gotoOff));
+    };
   });
   $("alertList").querySelectorAll("button[data-accept]").forEach((b) => {
     b.onclick = () => acceptVariant(b.dataset.accept, b.dataset.variant);
@@ -1380,6 +1404,7 @@ $("alertFilter").onchange = renderAlerts;
 // --- кнопка «Перевірити»: повний конвеєр валідаторів ---
 $("btnCheck").onclick = async () => {
   if (!root) { showSetup(false); return; }
+  const gen = projGen; // QA-10: якщо проєкт змінили під час перевірки — результат ігноруємо
   $("btnCheck").disabled = true;
   $("btnCheck").textContent = "⏳ " + t("checking");
   try {
@@ -1407,6 +1432,7 @@ $("btnCheck").onclick = async () => {
         payload: { docs: r.timeline_missing.map(([p, n]) => `${p} — #${n}`) },
       });
     }
+    if (gen !== projGen) return; // проєкт змінили — stale результат не малюємо
     fillAlerts(alerts, sum);
     await loadBible(); // картки оновилися після конвеєра
     document.querySelector('.stab[data-stab="alerts"]').click();

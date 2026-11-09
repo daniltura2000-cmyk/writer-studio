@@ -1,8 +1,8 @@
 use skri_core::models;
 use skri_core::narrative;
 use skri_core::{
-    animation, bible, crosspost, drift, frontmatter, indexer, presets, release, stats, timeline,
-    store::ProjectStore,
+    animation, bible, crosspost, drift, facts, frontmatter, indexer, presets, release, stats,
+    timeline, store::ProjectStore,
 };
 
 // --- DTO-структури для фронту (core-структури без Serialize не тягнемо) ---
@@ -774,6 +774,10 @@ pub fn run_checks(root: String) -> CmdResult<CheckReport> {
     stats::rebuild(&store).map_err(|e| e.to_string())?;
     let tv = timeline::validate(&store).map_err(|e| e.to_string())?;
     let _stale = crosspost::check_stale(&store).map_err(|e| e.to_string())?;
+    // QA-02: рушій фактів досьє — без нього кнопка «Перевірити» не бачить
+    // конфліктів віку/очей (CLI `skri facts` працював, а UI — ні)
+    facts::rebuild(&store).map_err(|e| e.to_string())?;
+    skri_core::style::run_style_checks(&root).map_err(|e| e.to_string())?;
 
     let mut alerts = Vec::new();
     let mut stmt = store
