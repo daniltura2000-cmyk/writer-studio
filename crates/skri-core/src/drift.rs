@@ -22,6 +22,54 @@ const MIN_LEN: usize = 5;
 /// Поріг схожості.
 const THRESHOLD: f64 = 0.82;
 
+/// Стаб-нормалізація відмінків uk/ru (без лематизації, свідомо груба):
+/// обрізає відмінкові закінчення (-ою/-ом/-ов/-а/-у/-и/-і/-е) зі слів,
+/// основа яких ≥ 4 символи і закінчується на приголосну («чоловічі імена
+/// на приголосній»: Олександр→Олександра→«олександр», Дэвид→Дэвида→«дэвид»).
+/// Жіночі імена на -а/-я з короткою основою («Оля», «Міра») не чіпаються.
+/// Використовується ТОЛЬКИ для порівняння/ключів — канонічна форма не змінюється.
+pub fn strip_case_suffix(word: &str) -> String {
+    let lower = word.to_lowercase();
+    const SUFFIXES: [&str; 8] = ["ою", "ом", "ов", "а", "у", "и", "і", "е"];
+    for suf in SUFFIXES {
+        if let Some(base) = lower.strip_suffix(suf) {
+            let chars: Vec<char> = base.chars().collect();
+            if chars.len() >= 4 && chars.last().map_or(false, |c| is_consonant(*c)) {
+                return base.to_string();
+            }
+        }
+    }
+    lower
+}
+
+/// Приголосні uk/ru (без м'якого знака й апострофа).
+fn is_consonant(c: char) -> bool {
+    matches!(
+        c,
+        'б' | 'в'
+            | 'г'
+            | 'ґ'
+            | 'д'
+            | 'ж'
+            | 'з'
+            | 'й'
+            | 'к'
+            | 'л'
+            | 'м'
+            | 'н'
+            | 'п'
+            | 'р'
+            | 'с'
+            | 'т'
+            | 'ф'
+            | 'х'
+            | 'ц'
+            | 'ч'
+            | 'ш'
+            | 'щ'
+    )
+}
+
 /// Нормалізована схожість Левенштейна [0..1].
 pub fn similarity(a: &str, b: &str) -> f64 {
     let a: Vec<char> = a.to_lowercase().chars().collect();
@@ -53,6 +101,10 @@ pub fn levenshtein(a: &[char], b: &[char]) -> usize {
 
 /// Знайти drift-групи серед auto-сутностей (вкл. слабких `auto-weak`),
 /// перешити згадки на канон (найчастіше згадувана форма), записати алерти.
+///
+/// QA-03: ПЕРЕД порівнянням схожості відмінкові форми («Олександр» /
+/// «Олександра», «Дэвид» / «Дэвида») зливаються ТИХО — це одне ім'я, а не
+/// drift-алерт. Див. [`strip_case_suffix`].
 pub fn detect(conn: &Connection) -> Result<Vec<DriftGroup>> {
     let mut stmt = conn.prepare(
         "SELECT e.id, e.canonical_form, e.aliases_json,
@@ -60,16 +112,63 @@ pub fn detect(conn: &Connection) -> Result<Vec<DriftGroup>> {
          FROM entities e WHERE e.source LIKE 'auto%'
          ORDER BY mc DESC, e.canonical_form",
     )?;
-    let entities: Vec<(i64, String, String, i64)> = stmt
+    let mut entities: Vec<(i64, String, String, i64)> = stmt
         .query_map([], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
         })?
         .filter_map(|r| r.ok())
         .collect();
 
+    // --- QA-03: відмінкові форми — те саме ім'я (без алерту) ---
+    // Групуємо auto-сутності за нормалізованою основою; групи з ≥2 членів
+    // зливаємо в найчастішу форму (перша — список відсортований за mc DESC):
+    // згадки перешиваються, форма-дубель додається в aliases. Жодного
+    // name-drift алерту це не створює.
+    let mut consumed = vec![false; entities.len()];
+    {
+        let mut by_norm: std::collections::HashMap<String, Vec<usize>> =
+            std::collections::HashMap::new();
+        for i in 0..entities.len() {
+            let key = strip_case_suffix(&entities[i].1);
+            by_norm.entry(key).or_default().push(i);
+        }
+        let groups: Vec<Vec<usize>> = by_norm.into_values().filter(|g| g.len() >= 2).collect();
+        for idxs in groups {
+            let canon_idx = idxs[0]; // найчастіша форма
+            let canon_id = entities[canon_idx].0;
+            let canon_name = entities[canon_idx].1.clone();
+            for &i in idxs.iter().skip(1) {
+                let id = entities[i].0;
+                conn.execute(
+                    "UPDATE mentions SET entity_id = ?2 WHERE entity_id = ?1",
+                    params![id, canon_id],
+                )?;
+                conn.execute("DELETE FROM entities WHERE id = ?1", params![id])?;
+                let aliases: Vec<String> =
+                    serde_json::from_str(&entities[canon_idx].2).unwrap_or_default();
+                let form = entities[i].1.clone();
+                if !form.eq_ignore_ascii_case(&canon_name)
+                    && !aliases.iter().any(|a| a.eq_ignore_ascii_case(&form))
+                {
+                    let mut updated = aliases.clone();
+                    updated.push(form);
+                    conn.execute(
+                        "UPDATE entities SET aliases_json = ?2 WHERE id = ?1",
+                        params![canon_id, serde_json::to_string(&updated)?],
+                    )?;
+                    entities[canon_idx].2 = serde_json::to_string(&updated)?;
+                }
+                consumed[i] = true;
+            }
+        }
+    }
+
     // жадібне групування: перший (найчастіший) член групи = канонічна форма
     let mut groups: Vec<(usize, Vec<usize>)> = Vec::new(); // (індекс канону в entities, індекси членів)
     for i in 0..entities.len() {
+        if consumed[i] {
+            continue; // вже злитий як відмінкова форма
+        }
         let name = &entities[i].1;
         if name.chars().count() < MIN_LEN {
             continue;

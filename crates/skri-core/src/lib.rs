@@ -12,6 +12,7 @@ pub mod animation;
 pub mod bible;
 pub mod crosspost;
 pub mod drift;
+pub mod facts;
 pub mod frontmatter;
 pub mod glossary;
 pub mod indexer;

@@ -84,6 +84,35 @@ fn open(root: &str) -> CmdResult<ProjectStore> {
     ProjectStore::open(std::path::Path::new(root)).map_err(|e| format!("не вдалося відкрити проєкт: {e}"))
 }
 
+/// QA-10 (ізоляція проєктів): rel-шлях мусить залишатися всередині кореня
+/// проєкту. Абсолютні шляхи, `..`, порожні/кореневі компоненти — відмова.
+/// Це єдина лінія оборони між «відкритою главою старого проєкту» і файлами
+/// нового: фронт може забути скинути стан, бекенд — не може.
+fn ensure_rel_inside_root(rel: &str) -> CmdResult<()> {
+    if rel.trim().is_empty() {
+        return Err("порожній шлях файла".into());
+    }
+    let p = std::path::Path::new(rel);
+    if p.is_absolute() {
+        return Err(format!("відмова: «{rel}» — абсолютний шлях, а не шлях усередині проєкту"));
+    }
+    for comp in p.components() {
+        match comp {
+            std::path::Component::ParentDir => {
+                return Err(format!("відмова: «{rel}» виходить за корінь проєкту (..)"));
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                return Err(format!("відмова: «{rel}» — шлях поза проєктом"));
+            }
+            std::path::Component::CurDir => {
+                return Err(format!("відмова: «{rel}» — некоректний відносний шлях"));
+            }
+            std::path::Component::Normal(_) => {}
+        }
+    }
+    Ok(())
+}
+
 /// Повний конвеєр індексування (те саме, що `skri index`).
 fn full_pipeline(store: &ProjectStore) -> CmdResult<()> {
     store.reindex().map_err(|e| e.to_string())?;
@@ -92,6 +121,45 @@ fn full_pipeline(store: &ProjectStore) -> CmdResult<()> {
     bible::merge_auto_into_manual(store).map_err(|e| e.to_string())?;
     narrative::scan_dialogue(store).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// QA-05: нотатки наявного досьє (тіло bible/*.md після frontmatter).
+/// Потрібні, щоб «Прийняти варіант» у name-drift не стирала текст досьє.
+fn existing_dossier_notes(store: &ProjectStore, canonical: &str) -> Option<String> {
+    let bible_dir = store.root.join("bible");
+    let entries = std::fs::read_dir(&bible_dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        let raw = std::fs::read_to_string(&path).ok()?;
+        let parsed = frontmatter::parse(&raw);
+        let name = parsed.meta.get("name").cloned().unwrap_or_default();
+        if name.eq_ignore_ascii_case(canonical) {
+            return Some(parsed.body);
+        }
+    }
+    None
+}
+
+/// QA-08: чи запущено Ollama локально (порт 11434 за замовчуванням).
+/// Без зовнішніх залежностей: достатньо TCP-з'єднання — якщо порт приймає,
+/// сервіс живий і локальні моделі готові.
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct OllamaStatus {
+    pub installed: bool,
+}
+
+#[tauri::command]
+pub fn ollama_status() -> CmdResult<OllamaStatus> {
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+    let addr: SocketAddr = "127.0.0.1:11434"
+        .parse()
+        .map_err(|e| format!("адреса Ollama: {e}"))?;
+    let installed = TcpStream::connect_timeout(&addr, Duration::from_millis(700)).is_ok();
+    Ok(OllamaStatus { installed })
 }
 
 // --- Команди (invoke-інтерфейс) ---
@@ -253,6 +321,29 @@ pub fn add_dossier(
             .find(|n| n.to_lowercase() == want)
             .unwrap_or_else(|| name.clone()) // імені ще нема — нове досьє
     };
+    let exists = {
+        // lower() у SQLite ASCII-only, тож для кирилиці звіряєм у Rust
+        let mut stmt = store
+            .conn()
+            .prepare("SELECT canonical_form FROM entities")
+            .map_err(|e| e.to_string())?;
+        let all: Vec<String> = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        let want = resolved.to_lowercase();
+        all.iter().any(|n| n.to_lowercase() == want)
+    };
+    // QA-05: якщо нотатки порожні, а досьє вже існує — НЕ затираємо їх.
+    // Так «Прийняти варіант» у name-drift додає псевдонім, не стираючи
+    // текст досьє автора. Явно передані нотатки (навіть порожні у формі
+    // редагування з непорожнім полем) поводяться як раніше.
+    let notes = if notes.trim().is_empty() && exists {
+        existing_dossier_notes(&store, &resolved).unwrap_or_else(|| notes)
+    } else {
+        notes
+    };
     let card = bible::ManualCard {
         name: resolved,
         aliases,
@@ -405,6 +496,10 @@ pub struct DocBody {
     pub has_frontmatter: bool,
     /// пари ключ=значення з frontmatter (тільки для показу)
     pub meta: Vec<(String, String)>,
+    /// абсолютний корінь проєкту, з якого прочитано главу.
+    /// QA-10: фронт звіряє його з поточним root перед збереженням —
+    /// глава з іншого проєкту не має права перезаписатися.
+    pub project_root: String,
 }
 
 /// Прочитати главу: тіло без frontmatter + метадані для заголовка.
@@ -432,23 +527,41 @@ pub fn read_doc(root: String, rel: String) -> CmdResult<DocBody> {
         body: parsed.body,
         has_frontmatter: !parsed.meta.is_empty(),
         meta: parsed.meta.into_iter().collect(),
+        project_root: store.root.to_string_lossy().to_string(),
     })
 }
 
 /// Зберегти тіло глави: frontmatter ПЕРЕЗАПИСУЄТЬСЯ БЕЗ ЗМІН (хірургічний
 /// сплайсинг — перечитуємо файл на момент збереження і не чіпаємо header-блок).
+///
+/// QA-10 (ізоляція проєктів): `rel` мусить бути відносним шляхом ВСЕРЕДИНІ
+/// поточного кореня — абсолютні шляхи, `..` і корінь диска відмовляються до
+/// будь-якого читання, тож глава з іншого проєкту фізично не може
+/// перезаписати файл у цьому (або будь-якому чужому) дереві.
 #[tauri::command]
 pub fn write_doc(root: String, rel: String, body: String) -> CmdResult<()> {
     let store = open(&root)?;
     let rel = rel.replace('\\', "/");
+    ensure_rel_inside_root(&rel)?;
     let path = store.root.join(&rel);
     let raw = std::fs::read_to_string(&path)
         .map_err(|e| format!("не вдалося прочитати {rel}: {e}"))?;
-    let parsed = frontmatter::parse(&raw);
-    let mut out = String::with_capacity(parsed.body_start + body.len());
-    out.push_str(&raw[..parsed.body_start]);
-    out.push_str(&body);
-    std::fs::write(&path, out).map_err(|e| format!("не вдалося записати {rel}: {e}"))?;
+    // QA-01: гарантований перенос рядка після закриваючого `---` перед тілом
+    // (тіло без початкового порожнього рядка не зливається з роздільником
+    // у `---# ...`, що робило файл непарсуваним).
+    let out = frontmatter::splice_body(&raw, &body);
+    std::fs::write(&path, &out).map_err(|e| format!("не вдалося записати {rel}: {e}"))?;
+    // Захисний інваріант QA-01: перечитуємо записане — frontmatter має
+    // парситися як і раніше (title не загублено). Інакше — відкат і
+    // людська помилка замість пошкодженого файла.
+    let check = std::fs::read_to_string(&path)
+        .map_err(|e| format!("не вдалося перечитати {rel}: {e}"))?;
+    if !frontmatter::title_preserved(&raw, &check) {
+        let _ = std::fs::write(&path, &raw); // відкат до попереднього стану
+        return Err(format!(
+            "Збереження скасовано: після запису frontmatter «{rel}» більше не читається (title втрачено). Файл повернуто без змін — перевірте, чи перший рядок тексту глави не зливається з роздільником."
+        ));
+    }
     // індекс = відображення файлів: оновлюємо docs/FTS одразу після збереження
     store.reindex().map_err(|e| e.to_string())?;
     Ok(())
@@ -631,6 +744,12 @@ pub struct CheckReport {
     pub candidates: usize,
     pub mentions: usize,
     pub entities: usize,
+    /// QA-07 (чесні підсумки): скільки з entities — досьє автора (manual)
+    pub entities_manual: usize,
+    /// ...а скільки знайдено в тексті автоматично (auto)
+    pub entities_auto: usize,
+    /// QA-07: «глав» у підсумку = ЛИШЕ manuscript, а не всі md-доки проєкту
+    pub manuscript_docs: usize,
     pub assertions: usize,
     pub conflicts: usize,
     pub merged: usize,
@@ -676,12 +795,46 @@ pub fn run_checks(root: String) -> CmdResult<CheckReport> {
         let payload = serde_json::from_str(&payload_json).unwrap_or(serde_json::Value::Null);
         alerts.push(AlertDto { id, kind, entity_id, payload });
     }
+    // QA-07: чесний підсумок — manual/auto окремо, «глави» = лише manuscript
+    let (entities_manual, entities_auto) = {
+        let mut stmt = store
+            .conn()
+            .prepare("SELECT source, COUNT(*) FROM entities GROUP BY source")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        let mut m = 0usize;
+        let mut a = 0usize;
+        for (src, n) in rows.flatten() {
+            if src == "manual" {
+                m += n as usize;
+            } else {
+                a += n as usize;
+            }
+        }
+        (m, a)
+    };
+    let manuscript_docs: usize = store
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM docs WHERE kind='manuscript' AND path LIKE 'manuscript/%'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .map(|n| n as usize)
+        .map_err(|e| e.to_string())?;
     Ok(CheckReport {
         docs: st.docs,
         words: st.words,
         candidates: scan.candidates,
         mentions: scan.mentions,
         entities: bib.entities,
+        entities_manual,
+        entities_auto,
+        manuscript_docs,
         assertions: bib.assertions,
         conflicts: bib.conflicts,
         merged,
@@ -824,5 +977,126 @@ mod tests {
         let alerts = run_style(root).unwrap();
         // головне — команда працює і віддає валідний список (може бути порожнім)
         let _ = alerts.len();
+    }
+
+    /// QA-10 (ізоляція проєктів): write_doc відмовляє шлях поза коренем (`..`,
+    /// абсолютний) і главу, якої немає в ДРУГОМУ проєкті — після «зміни root»
+    /// стара глава не має права перезаписати файл у новому дереві.
+    #[test]
+    fn write_doc_rejects_escape_and_foreign_root() {
+        let root1 = tmp_root("iso1");
+        let root2 = tmp_root("iso2");
+        for r in [&root1, &root2] {
+            let _store =
+                ProjectStore::init(std::path::Path::new(r), "novelist-uk", "uk").expect("init");
+            std::fs::create_dir_all(std::path::Path::new(r).join("manuscript")).unwrap();
+        }
+        std::fs::write(
+            std::path::Path::new(&root1).join("manuscript/01.md"),
+            "---\ntitle: Глава 1\n---\n\nТекст першого проєкту.",
+        )
+        .unwrap();
+
+        // у СВОЄМУ корені — працює
+        write_doc(root1.clone(), "manuscript/01.md".into(), "\nОновлений текст.\n".into()).unwrap();
+
+        // після зміни root: та сама rel у ДРУГОМУ проєкті — відмова (файлу немає,
+        // а головне — нічого не створено і не пошкоджено)
+        let err = write_doc(root2.clone(), "manuscript/01.md".into(), "\nзапис з чужого проєкту\n".into())
+            .expect_err("write_doc у чужому корені без файла має відмовити");
+        assert!(err.contains("не вдалося прочитати"), "несподівана помилка: {err}");
+        assert!(!std::path::Path::new(&root2).join("manuscript/01.md").exists(),
+            "write_doc не має СТВОРЮВАТИ файл у чужому проєкті");
+
+        // вихід за корінь через .. — відмова навіть коли ціль існує
+        let outside = std::env::temp_dir().join(format!("skri-tauri-outside-{}", std::process::id()));
+        std::fs::write(&outside, "не чіпати").unwrap();
+        let err = write_doc(
+            root1.clone(),
+            format!("../{}", outside.file_name().unwrap().to_string_lossy()),
+            "\nзлом\n".into(),
+        )
+        .expect_err(".. має відмовлятися");
+        assert!(err.contains("відмова"), "несподівана помилка: {err}");
+        assert_eq!(
+            std::fs::read_to_string(&outside).unwrap(),
+            "не чіпати",
+            "файл поза проєктом не змінено"
+        );
+        let _ = std::fs::remove_file(&outside);
+
+        // абсолютний шлях — відмова
+        let abs = std::path::Path::new(&root1).join("manuscript/01.md");
+        let err = write_doc(root1.clone(), abs.to_string_lossy().to_string(), "x".into())
+            .expect_err("абсолютний шлях має відмовлятися");
+        assert!(err.contains("відмова"), "несподівана помилка: {err}");
+    }
+
+    /// QA-01/QA-10: read_doc віддає project_root, а word_count у list_docs
+    /// рахує ЛИШЕ тіло (frontmatter не потрапляє в лічильник).
+    #[test]
+    fn read_doc_project_root_and_body_wordcount() {
+        let root = tmp_root("wc");
+        let _store = ProjectStore::init(std::path::Path::new(&root), "novelist-uk", "uk").expect("init");
+        std::fs::create_dir_all(std::path::Path::new(&root).join("manuscript")).unwrap();
+        // frontmatter містить 8 «слів», тіло — рівно 3
+        std::fs::write(
+            std::path::Path::new(&root).join("manuscript/01.md"),
+            "---\ntitle: Раз Два Три Чотири П'ять Шість Сім Вісім\n---\n\nСлово слово слово.",
+        )
+        .unwrap();
+        let d = read_doc(root.clone(), "manuscript/01.md".into()).unwrap();
+        assert_eq!(
+            d.project_root, root,
+            "project_root має вказувати на корінь цього проєкту"
+        );
+        let docs = list_docs(root).unwrap();
+        assert_eq!(docs[0].word_count, 3, "word_count = лише тіло, без frontmatter");
+    }
+
+    /// QA-05: «Прийняти варіант» (add_dossier з порожніми нотатками на
+    /// наявному досьє) додає псевдонім і НЕ стирає нотатки автора.
+    #[test]
+    fn add_dossier_empty_notes_preserves_existing() {
+        let root = tmp_root("notes-keep");
+        let _store = ProjectStore::init(std::path::Path::new(&root), "novelist-uk", "uk").expect("init");
+        add_dossier(
+            root.clone(),
+            "Міра".into(),
+            vec!["Міра Велан".into()],
+            "character".into(),
+            "шрам на лівій долоні".into(),
+        )
+        .unwrap();
+        // кнопка «Прийняти варіант»: ім'я = канонічне, нотатки порожні
+        add_dossier(
+            root.clone(),
+            "Міра".into(),
+            vec!["Мірочка".into()],
+            "character".into(),
+            "".into(),
+        )
+        .unwrap();
+        // нотатки збереглися у файлі досьє (бібліотека читає тіло як notes)
+        let bible_dir = std::path::Path::new(&root).join("bible");
+        let mut raw = String::new();
+        for e in std::fs::read_dir(&bible_dir).unwrap().flatten() {
+            let p = e.path();
+            if let Ok(r) = std::fs::read_to_string(&p) {
+                if r.starts_with("---") && r.contains("name: Міра") {
+                    raw = r;
+                    break;
+                }
+            }
+        }
+        assert!(raw.contains("шрам на лівій долоні"), "нотатки збереглися: {raw:?}");
+        assert!(raw.contains("Мірочка"), "новий псевдонім записано: {raw:?}");
+        // union псевдонімів — у БД (sync_bible/sync_aliases): у картці біблії
+        // і старі, і нові варіанти
+        let cards = run_bible(root.clone()).unwrap();
+        let mine: Vec<&EntityCardDto> = cards.iter().filter(|c| c.canonical == "Міра").collect();
+        assert_eq!(mine.len(), 1);
+        assert!(mine[0].aliases.contains(&"Мірочка".to_string()), "новий псевдонім у картці");
+        assert!(mine[0].aliases.contains(&"Міра Велан".to_string()), "старі не втрачено (union)");
     }
 }

@@ -27,6 +27,7 @@ fn main() {
             commands::new_doc,
             commands::add_dossier,
             commands::run_style,
+            commands::ollama_status,
         ])
         .run(tauri::generate_context!())
         .expect("помилка запуску Writer Studio");

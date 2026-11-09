@@ -423,6 +423,30 @@ fn raw() -> Vec<Meta> {
             "This is a TIP: replace with an em dash «—» unless it is a deliberate stylistic choice.",
             "Это СОВЕТ: замените на тире «—», если это не сознательный стилистический выбор.",
         ),
+        (
+            "fact-conflict",
+            "Суперечність фактів між главами",
+            "Conflicting facts between chapters",
+            "Противоречие фактов между главами",
+            "В одній главі про персонажа стверджується одне (наприклад, «йому 25 років»), а в іншій — інше («40 років»). Одне з тверджень — помилка або наслідок правки.",
+            "One chapter claims one thing about a character (e.g. \"he is 25\"), another chapter claims the opposite (\"40\"). One of them is a slip or a leftover from an edit.",
+            "В одной главе об персонаже утверждается одно (например, «ему 25 лет»), а в другой — другое («40 лет»). Одно из утверждений — ошибка или след правки.",
+            "Вирішіть, яке значення істинне: виправте главу або оновіть досьє персонажа — після наступної перевірки алерт зникне.",
+            "Decide which value is true: fix the chapter or update the character's dossier — the alert clears on the next check.",
+            "Решите, какое значение истинно: исправьте главу или обновите досье персонажа — после следующей проверки алерт исчезнет.",
+        ),
+        (
+            "fact-vs-dossier",
+            "Глава суперечить досьє",
+            "Chapter contradicts the dossier",
+            "Глава противоречит досье",
+            "У тексті глави зустрівся факт, що суперечить досьє персонажа (Story Bible) — наприклад, досьє каже «25 років», а глава — «40». Досьє вважається каноном.",
+            "A fact in a chapter contradicts the character's dossier (Story Bible) — e.g. the dossier says \"25 years old\" but the chapter says \"40\". The dossier is treated as canon.",
+            "В тексте главы встретился факт, противоречащий досье персонажа (Story Bible) — например, досье говорит «25 лет», а глава — «40». Досье считается каноном.",
+            "Перевірте главу: або виправте текст, або оновіть досьє, якщо канон змінився.",
+            "Check the chapter: either fix the text or update the dossier if the canon has changed.",
+            "Проверьте главу: либо исправьте текст, либо обновите досье, если канон изменился.",
+        ),
     ]
 }
 

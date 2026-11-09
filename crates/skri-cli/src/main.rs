@@ -83,6 +83,7 @@ fn usage() {
          \x20 skri sync export <папка> <вихід.json>             пакет обміну (флешка/спільна папка)\n\
          \x20 skri sync import <папка> <пакет.json>             злити пакет у локальний проєкт\n\
          \x20 skri style <папка>                                  перевірки стилю і грамотності (тавтологія, повтори, пробіли, тире)\n\
+         \x20 skri facts <папка>                                    факти досьє: витяг з біблії і глав, конфлікти між собою і з каноном\n\
          \x20 skri dossier add <папка> <ім'я> [--aliases а,б] [--kind персонаж] [--notes файл]  ручна картка досьє в біблію\n\
          \x20 skri dossier list <папка>                            картки досьє (Story Bible)\n\
          \x20 skri preset compose <назва> <kind:preset...>         зібрати свій пресет з ассетів"
@@ -121,6 +122,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "scrub" => cmd_scrub(&args[1..])?,
         "sync" => cmd_sync(&args[1..])?,
         "style" => cmd_style(args)?,
+        "facts" => cmd_facts(args)?,
         "dossier" => cmd_dossier(&args[1..])?,
         _ => usage(),
     }
@@ -1828,4 +1830,78 @@ fn cmd_dossier(rest: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             exit(2);
         }
     }
+}
+
+/// `skri facts <папка>` — рушій фактів досьє (QA-02): звіт витягнутих
+/// фактів + конфлікти між главами і проти канону досьє.
+fn cmd_facts(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    use skri_core::{alerts_meta, facts};
+    let dir = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| usage_exit("facts: вкажіть папку проєкту"));
+    let store = open_at(&dir);
+    // конвеєр індексування (передумова rebuild): entities/aliases у БД
+    store.reindex()?;
+    indexer::scan_project(&store)?;
+    bible::sync_bible(&store)?;
+    bible::merge_auto_into_manual(&store)?;
+    let rep = facts::rebuild(&store)?;
+
+    println!("✔ витягнуто фактів: {} (конфліктів між главами: {}, проти досьє: {})", rep.facts, rep.conflicts, rep.vs_dossier);
+    let mut stmt = store.conn().prepare(
+        "SELECT doc_path, char_start, entity, kind, value FROM extracted_facts
+         ORDER BY entity, doc_path, char_start",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, String>(4)?,
+        ))
+    })?;
+    for (doc, start, entity, kind, value) in rows.flatten() {
+        let src = if doc.starts_with("bible/") { "канон" } else { "глава" };
+        println!(
+            "● {} — {}: «{}»  [{src} {doc} @offset {start}]",
+            entity,
+            facts::kind_label(&kind),
+            value
+        );
+    }
+
+    // fact-алерти з людськими поясненнями
+    let mut stmt = store.conn().prepare(
+        "SELECT id, kind, payload_json FROM alerts
+         WHERE kind IN ('fact-conflict','fact-vs-dossier') AND resolved=0 ORDER BY id",
+    )?;
+    let alerts: Vec<(i64, String, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .filter_map(|r| r.ok())
+        .collect();
+    if !alerts.is_empty() {
+        println!("\n⚠ факт-конфліктів: {}", alerts.len());
+        for (id, kind, payload_json) in &alerts {
+            let meta = alerts_meta::catalog().into_iter().find(|m| m.kind == *kind);
+            let title = meta
+                .as_ref()
+                .map(|m| m.title_uk.clone())
+                .unwrap_or_else(|| kind.clone());
+            println!("\n[{title} #{id}]");
+            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(payload_json) {
+                if let Some(m) = payload.get("message").and_then(|m| m.as_str()) {
+                    println!("  ● {m}");
+                }
+                if let (Some(a), Some(b)) = (
+                    payload.get("doc_a").and_then(|m| m.as_str()),
+                    payload.get("doc_b").and_then(|m| m.as_str()),
+                ) {
+                    println!("    де: {a} ↔ {b}");
+                }
+            }
+        }
+    }
+    Ok(())
 }

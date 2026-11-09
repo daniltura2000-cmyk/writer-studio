@@ -158,6 +158,15 @@ CREATE TABLE IF NOT EXISTS var_ops (
   doc_path TEXT NOT NULL,
   char_start INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS extracted_facts (
+  id INTEGER PRIMARY KEY,
+  doc_path TEXT NOT NULL,
+  char_start INTEGER NOT NULL DEFAULT 0,
+  entity TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  value TEXT NOT NULL,
+  sentence TEXT NOT NULL DEFAULT ''
+);
 "#;
 
 impl ProjectStore {

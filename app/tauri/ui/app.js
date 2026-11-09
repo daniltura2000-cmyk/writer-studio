@@ -86,7 +86,7 @@ const I18N = {
     missing_time_title: "Глави без позначок часу",
     missing_time_explain: "У цих главах програма не знайшла жодної позначки часу («наступного ранку», «через три дні», дата).",
     missing_time_action: "Додай хоч одну позначку часу в кожну главу — тоді програма стежитиме за хронологією історії.",
-    sum_checks: "Перевірено {d} {dw} ({w} {ww}). Персонажів та сутностей: {e}.",
+    sum_checks: "Перевірено {d} {dw} ({w} {ww}).",
     sum_found: "Знайдено: {p} {pw} і {tp} {tw}.",
     sum_drift_only: "Знайдено {g} {gw} з різними написаннями імен. Натисни «Перевірити» вгорі, щоб перевірити весь рукопис.",
     drift_gw: ["групу", "групи", "груп"],
@@ -114,18 +114,28 @@ const I18N = {
     save: "Зберегти (Ctrl+S)",
     saved_at: "Збережено о {t}",
     no_doc_save: "Спершу відкрий главу ліворуч.",
+    save_suspicious: "⚠ Збереження виглядає підозріло — перевір файл",
+    save_wrong_project: "Ця глава з іншого проєкту — збереження скасовано. Відкрий главу в поточному проєкті.",
+    goto: "Перейти",
+    accept_variant: "Прийняти варіант",
+    ignore: "Ігнорувати",
+    accepted_alias: "Записано в досьє як псевдонім",
+    sum_entities: "Досьє автора: {m} · Знайдено в тексті: {a}",
+    models_settings_note: "Це налаштування. Щоб виконати задачу — скоро: редактор отримає кнопки",
+    ollama_ready: "Готово (локально)",
+    ollama_missing: "Не встановлено",
     ed_empty_t: "Почніть писати",
     ed_empty_d: "Відкрий главу ліворуч або натисни «Створити главу». Frontmatter (службовий блок на початку файлу) тут не редагується — лише текст.",
     ed_ph: "Текст глави…",
     ed_meta_fm: "службові поля:",
     ed_meta_nofm: "без службового блоку",
     confirm_unsaved: "Є незбережені зміни. Перейти без збереження?",
-    // моделі
-    models_t: "Моделі: хто що робить",
+    // моделі (QA-08: чесний каталог)
+    models_t: "Налаштування моделей",
     models_sub: "Для різних справ програма використовує різні «мозки». Вибери справу — покажемо, хто її виконує. Перша модель завжди рекомендована і працює на твоєму комп'ютері.",
     pick_task: "Оберіть справу",
     pick_task_hint: "Натисни кнопку зі справою зверху — покажемо доступні моделі.",
-    mt_generate_uk_t: "Напише текст за тебе",
+    mt_generate_uk_t: "Зможе дописати текст",
     mt_generate_uk_d: "Чернетки сцен, продовження речення, підправити стиль — українською.",
     mt_translate_t: "Перекладе главу",
     mt_translate_d: "Переклад на іншу мову, імена персонажів лишаться правильними.",
@@ -162,7 +172,7 @@ const I18N = {
     wiz_finish: "Почати",
     btn_back: "← Назад",
     start_t: "Початок роботи",
-    start_sub: "Чотири запитання — і програма налаштується під те, що ти пишеш: роман, вебновел, сценарій гри чи нотатки.",
+    start_sub: "Два швидкі питання — і програма налаштується під те, що ти пишеш: роман, вебновел, сценарій гри чи нотатки.",
     start_btn: "Пройти швидке налаштування",
     // вибір проєкту
     setup_t: "Відкрий або створи проєкт",
@@ -264,7 +274,7 @@ const I18N = {
     missing_time_title: "Chapters without time markers",
     missing_time_explain: "The app found no time markers (“next morning”, “three days later”, a date) in these chapters.",
     missing_time_action: "Add at least one time marker per chapter — then the app can keep track of your story's chronology.",
-    sum_checks: "Checked {d} {dw} ({w} {ww}). Characters and entities: {e}.",
+    sum_checks: "Checked {d} {dw} ({w} {ww}).",
     sum_found: "Found: {p} {pw} and {tp} {tw}.",
     sum_drift_only: "Found {g} {gw} of names with different spellings. Click “Check” above to run the full check.",
     drift_gw: ["group", "groups", "groups"],
@@ -290,17 +300,27 @@ const I18N = {
     save: "Save (Ctrl+S)",
     saved_at: "Saved at {t}",
     no_doc_save: "Open a chapter on the left first.",
+    save_suspicious: "⚠ Saving looks suspicious — check the file",
+    save_wrong_project: "This chapter belongs to another project — save cancelled. Open a chapter in the current project.",
+    goto: "Go to",
+    accept_variant: "Accept spelling",
+    ignore: "Ignore",
+    accepted_alias: "Saved to the dossier as an alias",
+    sum_entities: "Author's dossiers: {m} · Found in text: {a}",
+    models_settings_note: "This is a setting. To actually run the job — soon: the editor will get buttons",
+    ollama_ready: "Ready (local)",
+    ollama_missing: "Not installed",
     ed_empty_t: "Start writing",
     ed_empty_d: "Open a chapter on the left or click “New chapter”. Frontmatter (the service block at the top of the file) is not edited here — only the text.",
     ed_ph: "Chapter text…",
     ed_meta_fm: "frontmatter:",
     ed_meta_nofm: "no frontmatter",
     confirm_unsaved: "There are unsaved changes. Leave without saving?",
-    models_t: "Models: who does what",
+    models_t: "Model settings",
     models_sub: "For different jobs the app uses different “brains”. Pick a job and we'll show who does it. The first model is always recommended and runs on your computer.",
     pick_task: "Pick a job",
     pick_task_hint: "Click a job button above — we'll show the available models.",
-    mt_generate_uk_t: "Writes text for you",
+    mt_generate_uk_t: "Will be able to draft text",
     mt_generate_uk_d: "Scene drafts, sentence continuation, style fixes — in Ukrainian.",
     mt_translate_t: "Translates a chapter",
     mt_translate_d: "Translation into another language while character names stay correct.",
@@ -336,7 +356,7 @@ const I18N = {
     wiz_finish: "Get started",
     btn_back: "← Back",
     start_t: "Get started",
-    start_sub: "Four quick questions and the app adapts to what you write: a novel, a web-novel, a game script or notes.",
+    start_sub: "Two quick questions and the app adapts to what you write: a novel, a web-novel, a game script or notes.",
     start_btn: "Run the quick setup",
     setup_t: "Open or create a project",
     setup_sub: "A project is a folder with your texts (the app keeps its service data in .skri/ inside). Point to an existing folder or create a new one.",
@@ -435,7 +455,7 @@ const I18N = {
     missing_time_title: "Главы без отметок времени",
     missing_time_explain: "В этих главах программа не нашла ни одной отметки времени («на следующее утро», «через три дня», дата).",
     missing_time_action: "Добавьте хотя бы одну отметку времени в каждую главу — тогда программа будет следить за хронологией истории.",
-    sum_checks: "Проверено {d} {dw} ({w} {ww}). Персонажей и сущностей: {e}.",
+    sum_checks: "Проверено {d} {dw} ({w} {ww}).",
     sum_found: "Найдено: {p} {pw} и {tp} {tw}.",
     sum_drift_only: "Найдено {g} {gw} с разными написаниями имён. Нажмите «Проверить» сверху, чтобы проверить всю рукопись.",
     drift_gw: ["группу", "группы", "групп"],
@@ -461,17 +481,27 @@ const I18N = {
     save: "Сохранить (Ctrl+S)",
     saved_at: "Сохранено в {t}",
     no_doc_save: "Сначала откройте главу слева.",
+    save_suspicious: "⚠ Сохранение выглядит подозрительно — проверьте файл",
+    save_wrong_project: "Эта глава из другого проекта — сохранение отменено. Откройте главу в текущем проекте.",
+    goto: "Перейти",
+    accept_variant: "Принять вариант",
+    ignore: "Игнорировать",
+    accepted_alias: "Записано в досье как псевдоним",
+    sum_entities: "Досье автора: {m} · Найдено в тексте: {a}",
+    models_settings_note: "Это настройка. Чтобы выполнить задачу — скоро: редактор получит кнопки",
+    ollama_ready: "Готово (локально)",
+    ollama_missing: "Не установлено",
     ed_empty_t: "Начните писать",
     ed_empty_d: "Откройте главу слева или нажмите «Создать главу». Frontmatter (служебный блок в начале файла) здесь не редактируется — только текст.",
     ed_ph: "Текст главы…",
     ed_meta_fm: "служебные поля:",
     ed_meta_nofm: "без служебного блока",
     confirm_unsaved: "Есть несохранённые изменения. Перейти без сохранения?",
-    models_t: "Модели: кто что делает",
+    models_t: "Настройки моделей",
     models_sub: "Для разных дел программа использует разные «мозги». Выберите дело — покажем, кто его выполняет. Первая модель всегда рекомендована и работает на вашем компьютере.",
     pick_task: "Выберите дело",
     pick_task_hint: "Нажмите кнопку с делом сверху — покажем доступные модели.",
-    mt_generate_uk_t: "Напишет текст за вас",
+    mt_generate_uk_t: "Сможет дописать текст",
     mt_generate_uk_d: "Черновики сцен, продолжение фраз, правка стиля — на украинском.",
     mt_translate_t: "Переведёт главу",
     mt_translate_d: "Перевод на другой язык, имена персонажей останутся правильными.",
@@ -507,7 +537,7 @@ const I18N = {
     wiz_finish: "Начать",
     btn_back: "← Назад",
     start_t: "Начало работы",
-    start_sub: "Четыре быстрых вопроса — и программа настроится под то, что вы пишете: роман, вебновел, сценарий игры или заметки.",
+    start_sub: "Два быстрых вопроса — и программа настроится под то, что вы пишете: роман, вебновел, сценарий игры или заметки.",
     start_btn: "Пройти быструю настройку",
     setup_t: "Откройте или создайте проект",
     setup_sub: "Проект — это папка с вашими текстами (программа хранит служебные данные в .skri/ внутри). Укажите путь к существующей папке или создайте новую.",
@@ -705,9 +735,48 @@ function setProjState(ok, text) {
   el.className = "proj-state " + (ok ? "ok" : "bad");
 }
 
+// QA-10 (ізоляція проєктів): при зміні проєкту відкрита глава старого
+// не має права перезаписати файл нового. Скидаємо ВСЕ, що тримало старий
+// проєкт у пам'яті/DOM: главу, редактор, біблію, алерти, канбан, фільтри.
+function resetProjectState() {
+  currentDoc = null;
+  dirty = false;
+  editor.value = "";
+  $("docTitle").textContent = "";
+  $("docMeta").textContent = "";
+  $("saveState").textContent = "";
+  $("saveState").className = "note";
+  $("editorEmpty").classList.remove("hidden");
+  $("docList").innerHTML = "";
+  // біблія
+  lastCards = null;
+  delete $("cards").dataset.loaded;
+  $("cards").innerHTML = "";
+  $("dossierForm").classList.add("hidden");
+  dosEditing = null;
+  // алерти + фільтр
+  lastAlerts = null;
+  alertSummaryBase = "";
+  $("alertList").innerHTML = "";
+  $("alertsSummary").textContent = "";
+  $("alertFilter").innerHTML = `<option value="">${esc(t("filter_all"))}</option>`;
+  $("alertBadge").hidden = true;
+  // канбан
+  lastBoard = null;
+  delete $("kanban").dataset.loaded;
+  $("kanban").innerHTML = "";
+  $("forecastBox").innerHTML = "";
+  // інструменти діалогів
+  $("varsOut").innerHTML = "";
+  $("barksOut").innerHTML = "";
+  $("epOut").innerHTML = "";
+}
+
 async function openProject(path, quiet = false) {
   root = path;
   localStorage.setItem("skri.root", root);
+  // спершу скидаємо стан СТАРОГО проєкту — до будь-яких запитів
+  resetProjectState();
   $("projRoot").value = root;
   $("setupRoot").value = root;
   const r = await cmdq("project_info");
@@ -849,15 +918,43 @@ function updateCounts() {
 
 async function saveDoc() {
   if (!currentDoc) { $("saveState").textContent = t("no_doc_save"); return; }
+  // QA-10: глава має належати ПОТОЧНОМУ проєкту. read_doc віддає
+  // project_root — якщо він не збігається з відкритим root, збереження
+  // скасовуємо ще ДО виклику write_doc (бекенд додатково відмовляє шляхи
+  // поза коренем — подвійний захист).
+  if (currentDoc.project_root && !sameRoot(currentDoc.project_root, root)) {
+    dirty = false;
+    currentDoc = null;
+    $("saveState").className = "note err";
+    $("saveState").textContent = t("save_wrong_project");
+    return;
+  }
   try {
     await cmd("write_doc", { rel: currentDoc.path, body: editor.value });
+    // QA-01: тиха повторна перевірка — прочитали файл назад і звірили з тим,
+    // що мали зберегти. Порожній/без тексту при непорожньому редакторі =
+    // підозріло: показуємо попередження і НЕ ховаємо статус (не пишемо
+    // «збережено», не скидаємо dirty — користувач має перевірити файл).
+    const r = await cmdq("read_doc", { rel: currentDoc.path });
+    const body = r.ok && typeof r.ok.body === "string" ? r.ok.body : null;
+    if (r.err != null || (body !== null && !body.trim() && editor.value.trim())) {
+      $("saveState").className = "note err";
+      $("saveState").textContent = t("save_suspicious");
+      return;
+    }
     dirty = false;
     const now = new Date();
+    $("saveState").className = "note";
     $("saveState").textContent = t("saved_at", {
       t: String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0"),
     });
     await loadDocs(); // свіжі word_count у списку
   } catch { /* помилку вже показано в cmd() */ }
+}
+// порівняння коренів: роздільники/регістр/хвостові слеші не мають значення
+function sameRoot(a, b) {
+  const norm = (p) => String(p || "").replace(/\\+/g, "/").replace(/\/+$/, "").toLowerCase();
+  return norm(a) === norm(b);
 }
 $("btnSave").onclick = saveDoc;
 
@@ -998,34 +1095,161 @@ const FALLBACK_META = [
 
 let alertMeta = {};   // kind -> {severity, title, explain, action}
 let lastAlerts = null; // масив {kind, payload, id} (drift-групи — віртуальні записи)
+let alertSummaryBase = ""; // статична частина підсумку («що перевірено») — QA-07
 
-// переклад ключів payload людською мовою
+// переклад ключів payload людською мовою (QA-09)
 const PK = {
-  uk: { canonical: "правильне написання", variants: "варіанти написання", doc: "файл", doc_path: "файл", chapter: "глава", attribute: "властивість", value: "значення", old_value: "було", new_value: "стало", old: "було", new: "стало", entity: "персонаж", platform: "платформа", version_hash: "опублікована версія", new_hash: "нова версія", day: "день", location: "локація", locations: "локації", sentence: "речення", line: "рядок", attr: "характеристика", device: "пристрій", src: "файл", claim: "твердження", source: "джерело", entity_name: "персонаж", affected_doc: "файл", docs: "глави" },
-  en: { canonical: "correct spelling", variants: "spellings found", doc: "file", doc_path: "file", chapter: "chapter", attribute: "attribute", value: "value", old_value: "was", new_value: "now", old: "was", new: "now", entity: "character", platform: "platform", version_hash: "published version", new_hash: "new version", day: "day", location: "location", locations: "locations", sentence: "sentence", line: "line", attr: "attribute", device: "device", src: "file", claim: "claim", source: "source", entity_name: "character", affected_doc: "file", docs: "chapters" },
-  ru: { canonical: "правильное написание", variants: "варианты написания", doc: "файл", doc_path: "файл", chapter: "глава", attribute: "свойство", value: "значение", old_value: "было", new_value: "стало", old: "было", new: "стало", entity: "персонаж", platform: "платформа", version_hash: "опубликованная версия", new_hash: "новая версия", day: "день", location: "локация", locations: "локации", sentence: "предложение", line: "строка", attr: "свойство", device: "устройство", src: "файл", claim: "утверждение", source: "источник", entity_name: "персонаж", affected_doc: "файл", docs: "главы" },
+  uk: { canonical: "правильне написання", variants: "варіанти написання", doc: "файл", doc_path: "файл", chapter: "глава", attribute: "властивість", value: "значення", old_value: "було", new_value: "стало", old: "було", new: "стало", entity: "персонаж", platform: "платформа", version_hash: "опублікована версія", new_hash: "нова версія", day: "день", location: "локація", locations: "локації", sentence: "речення", line: "рядок", attr: "характеристика", device: "пристрій", src: "файл", claim: "твердження", source: "джерело", entity_name: "персонаж", affected_doc: "файл", docs: "глави", marker: "мітка часу", from: "була доба", to: "стала доба", values: "значення", duplicate: "дубль", trigger: "тригер", changes: "зміни", entries: "записи" },
+  en: { canonical: "correct spelling", variants: "spellings found", doc: "file", doc_path: "file", chapter: "chapter", attribute: "attribute", value: "value", old_value: "was", new_value: "now", old: "was", new: "now", entity: "character", platform: "platform", version_hash: "published version", new_hash: "new version", day: "day", location: "location", locations: "locations", sentence: "sentence", line: "line", attr: "attribute", device: "device", src: "file", claim: "claim", source: "source", entity_name: "character", affected_doc: "file", docs: "chapters", marker: "time marker", from: "was day", to: "became day", values: "values", duplicate: "duplicate", trigger: "trigger", changes: "changes", entries: "entries" },
+  ru: { canonical: "правильное написание", variants: "варианты написания", doc: "файл", doc_path: "файл", chapter: "глава", attribute: "свойство", value: "значение", old_value: "было", new_value: "стало", old: "было", new: "стало", entity: "персонаж", platform: "платформа", version_hash: "опубликованная версия", new_hash: "новая версия", day: "день", location: "локация", locations: "локации", sentence: "предложение", line: "строка", attr: "свойство", device: "устройство", src: "файл", claim: "утверждение", source: "источник", entity_name: "персонаж", affected_doc: "файл", docs: "главы", marker: "отметка времени", from: "был день", to: "стал день", values: "значения", duplicate: "дубль", trigger: "триггер", changes: "изменения", entries: "записи" },
 };
+// службові ключі payload — НЕ показуємо (QA-09): message — це core-текст
+// валідатора (окрема робота з перекладу), offset-и/id живлять кнопку «Перейти»
+const PK_HIDDEN = new Set(["kind", "message", "char_start", "ord", "bark_id"]);
 
 function pkLabel(k) { return (PK[lang] && PK[lang][k]) || k; }
 
-function fmtVal(v) {
+function fmtVal(k, v) {
   if (v == null) return "—";
-  if (Array.isArray(v)) return v.map(fmtVal).join(" | ");
+  // QA-09: складені payload-структури — людською, а не JSON-стенограмою
+  if (k === "changes" && Array.isArray(v))
+    return v.map((c) => `${fmtVal("chapter", c.chapter)}: ${fmtVal("old", c.old)} → ${fmtVal("new", c.new)}`).join(" | ");
+  if (k === "entries" && Array.isArray(v))
+    return v.map((e) => `${fmtVal("chapter", e.chapter)}: ${fmtVal("value", e.value)}`).join(" | ");
+  if (Array.isArray(v)) return v.map((x) => fmtVal("", x)).join(" | ");
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
 }
 
+// --- QA-05: дієві алерти — глава + цитата + кнопка «Перейти» ---
+
+// глава й offset алерту (offset-и з ядра — байтові, у тілі без frontmatter)
+function alertDoc(a) {
+  const p = a.payload || {};
+  return p.doc || p.doc_path || p.affected_doc || null;
+}
+function alertOffset(a) {
+  const n = Number((a.payload || {}).char_start);
+  return Number.isFinite(n) ? n : null;
+}
+function quoteOf(a) {
+  const p = a.payload || {};
+  let q = String(p.sentence || p.marker || p.word || p.canonical || "").trim();
+  if (q.length > 60) q = q.slice(0, 57) + "…";
+  return q;
+}
+
+// UTF-8 байтовий offset → індекс у JS-рядку (бінарний пошук по префіксу)
+function byteIndexToCharIndex(str, byteOffset) {
+  const enc = new TextEncoder();
+  let lo = 0, hi = str.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (enc.encode(str.slice(0, mid)).length <= byteOffset) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+// Відкрити главу алерту і підсвітити рядок з offset на 2 секунди:
+// scrollIntoView-подібний скрол textarea + жовтий flash поверх рядка.
+function flashLineAt(byteOffset) {
+  const ta = $("editor");
+  const text = ta.value;
+  if (!text) return;
+  const ci = Math.min(byteIndexToCharIndex(text, byteOffset), Math.max(text.length - 1, 0));
+  const lineStart = text.lastIndexOf("\n", Math.max(ci - 1, 0)) + 1;
+  const lineNo = (text.slice(0, lineStart).match(/\n/g) || []).length;
+  const cs = getComputedStyle(ta);
+  const lineHeight = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.7 || 27;
+  const padTop = parseFloat(cs.paddingTop) || 0;
+  // скрол так, щоб рядок опинився приблизно посередині видимої області
+  const target = Math.max(0, Math.min(padTop + lineNo * lineHeight - ta.clientHeight / 2, ta.scrollHeight - ta.clientHeight));
+  ta.scrollTop = target;
+  const hl = document.createElement("div");
+  hl.className = "line-flash";
+  hl.style.top = Math.max(padTop + lineNo * lineHeight - ta.scrollTop, 0) + "px";
+  hl.style.height = Math.ceil(lineHeight) + "px";
+  hl.style.left = (parseFloat(cs.paddingLeft) || 0) + "px";
+  hl.style.right = (parseFloat(cs.paddingRight) || 0) + "px";
+  $("editorPane").appendChild(hl);
+  setTimeout(() => hl.remove(), 2000);
+}
+
+async function gotoAlert(doc, charStart) {
+  if (!doc) return;
+  try {
+    await openDoc(doc);
+    if (charStart != null) flashLineAt(charStart);
+  } catch { /* помилку вже показано в cmd() */ }
+}
+
+// --- ігнорування карток: localStorage за (root, kind, doc, key) ---
+function alertKey(a) {
+  const p = a.payload || {};
+  return [a.kind, p.doc || p.doc_path || p.affected_doc || "", p.canonical || p.entity || p.entity_name || p.trigger || p.attribute || ""].join("|");
+}
+function dismissedMap() {
+  try { return JSON.parse(localStorage.getItem("skri.dismissed") || "{}"); } catch { return {}; }
+}
+function isDismissed(a) { return !!dismissedMap()[`${root}|${alertKey(a)}`]; }
+function dismissAlerts(arr) {
+  const m = dismissedMap();
+  for (const a of arr) m[`${root}|${alertKey(a)}`] = 1;
+  localStorage.setItem("skri.dismissed", JSON.stringify(m));
+}
+
+// «Прийняти варіант» у name-drift: записати форму як псевдонім досьє
+// (add_dossier робить union псевдонімів, нотатки наявного досьє зберігаються).
+async function acceptVariant(canonical, variant) {
+  if (!root) { showSetup(false); return; }
+  try {
+    let aliases = [variant];
+    let kind = "other";
+    try {
+      const cards = await cmd("run_bible");
+      const c = (cards || []).find((x) => (x.canonical || "").toLowerCase() === String(canonical).toLowerCase());
+      if (c) {
+        aliases = [...new Set([...(c.aliases || []), variant])];
+        kind = KIND_MAP[c.entity_type] || c.entity_type || "other";
+      }
+    } catch { /* картки ще не завантажені — записуємо мінімум */ }
+    await cmd("add_dossier", { name: canonical, aliases, kind, notes: "" });
+    try { await loadBible(); } catch { /* оновимо наступного разу */ }
+    // drift-групу, для якої прийняли варіант, прибираємо з екрана
+    lastAlerts = (lastAlerts || []).filter(
+      (a) => !(a.kind === "name-drift" && (a.payload?.canonical || "").toLowerCase() === String(canonical).toLowerCase())
+    );
+    renderAlerts();
+  } catch { /* помилку вже показано в cmd() */ }
+}
+
 function instanceHtml(a) {
+  const p = a.payload && typeof a.payload === "object" && !Array.isArray(a.payload) ? a.payload : null;
   let rows;
-  if (a.payload && typeof a.payload === "object" && !Array.isArray(a.payload)) {
-    rows = Object.entries(a.payload)
-      .filter(([k]) => k !== "kind")
-      .map(([k, v]) => `<div class="kv"><span class="k">${esc(pkLabel(k))}:</span><span class="v">${esc(fmtVal(v))}</span></div>`)
+  if (p) {
+    // QA-09: службові ключі (message з ядра, технічні offset-и) не показуємо
+    rows = Object.entries(p)
+      .filter(([k]) => !PK_HIDDEN.has(k))
+      .map(([k, v]) => `<div class="kv"><span class="k">${esc(pkLabel(k))}:</span><span class="v">${esc(fmtVal(k, v))}</span></div>`)
       .join("");
   } else {
-    rows = `<div class="v">${esc(fmtVal(a.payload))}</div>`;
+    rows = `<div class="v">${esc(fmtVal("", a.payload))}</div>`;
   }
-  return `<div class="ainstance">${rows || "—"}</div>`;
+  // Кнопка «Перейти» — лише якщо у payload є і глава, і offset (QA-05)
+  const doc = alertDoc(a);
+  const off = alertOffset(a);
+  let gotoHtml = "";
+  if (doc && off != null) {
+    const q = quoteOf(a);
+    gotoHtml =
+      `<div class="agoto">` +
+      (q ? `<span class="q">«${esc(q)}»</span>` : "") +
+      `<span class="where">${esc(doc)}</span>` +
+      `<button class="compact" data-goto-doc="${esc(doc)}" data-goto-off="${off}">${esc(t("goto"))} ↦</button>` +
+      `</div>`;
+  }
+  return `<div class="ainstance">${rows || "—"}${gotoHtml}</div>`;
 }
 
 function metaFor(kind) {
@@ -1043,9 +1267,12 @@ function renderAlerts() {
   if (!lastAlerts) return;
   const f = $("alertFilter").value;
   const list = f ? lastAlerts.filter((a) => a.kind === f) : lastAlerts;
+  // QA-07: бейдж = фільтр = підсумок рахують ОДНАКОВО — по відфільтрованому
+  // списку, мінус ігноровані картки
+  const visible = list.filter((a) => !isDismissed(a));
   // групування по kind; спершу problem, потім tip
   const byKind = new Map();
-  for (const a of list) {
+  for (const a of visible) {
     if (!byKind.has(a.kind)) byKind.set(a.kind, []);
     byKind.get(a.kind).push(a);
   }
@@ -1054,34 +1281,72 @@ function renderAlerts() {
     const sy = metaFor(y).severity === "problem" ? 0 : 1;
     return sx - sy || byKind.get(y).length - byKind.get(x).length;
   });
+  // підсумок: статична частина (що перевірено) + чесний «знайдено» по фільтру
+  const problems = visible.filter((a) => metaFor(a.kind).severity === "problem").length;
+  const tips = visible.length - problems;
+  let sum = alertSummaryBase ? alertSummaryBase + " " : "";
+  if (visible.length) {
+    sum += t("sum_found", { p: problems, pw: plural(problems, I18N[lang].problem_w), tp: tips, tw: plural(tips, I18N[lang].tip_w) });
+  }
+  $("alertsSummary").textContent = sum;
   $("alertList").innerHTML =
     kinds
       .map((k) => {
         const m = metaFor(k);
         const arr = byKind.get(k);
         const tip = m.severity !== "problem";
+        // QA-05: у name-drift — «Прийняти варіант» для кожної форми;
+        // на кожній картці — «Ігнорувати» (ховає до перезапуску перевірки)
+        const acceptBtns =
+          k === "name-drift"
+            ? arr
+                .map((a) =>
+                  (a.payload?.variants || [])
+                    .map(
+                      (v) =>
+                        `<button class="compact" data-accept="${esc(a.payload?.canonical || "")}" data-variant="${esc(v)}">✓ ${esc(t("accept_variant"))} «${esc(v)}»</button>`
+                    )
+                    .join("")
+                )
+                .join("")
+            : "";
+        const ignoreBtn = `<button class="compact ghost" data-ignore-kind="${esc(k)}">✕ ${esc(t("ignore"))}</button>`;
         return `<div class="acard ${tip ? "tip" : ""}">
         <div class="ahead"><span class="atitle">${esc(m.title)}</span><span class="acount">${arr.length}</span></div>
         ${m.explain ? `<div class="aexp">${esc(t("what_means"))} ${esc(m.explain)}</div>` : ""}
         ${m.action ? `<div class="ado"><b>${esc(t("what_do"))}</b> ${esc(m.action)}</div>` : ""}
+        <div class="acard-actions">${acceptBtns}${ignoreBtn}</div>
         <details><summary>${esc(t("show_n"))} (${arr.length})</summary>${arr.map(instanceHtml).join("")}</details>
       </div>`;
       })
       .join("") ||
     `<div class="empty"><span class="ico">✅</span>${esc(t("no_alerts"))}</div>`;
-  // бейдж на вкладці
+  // бейдж на вкладці = кількість ВИДИМИХ (з урахуванням фільтра й ігнорованих)
   const badge = $("alertBadge");
-  badge.hidden = lastAlerts.length === 0;
-  badge.textContent = lastAlerts.length;
-  // опції фільтра
+  badge.hidden = visible.length === 0;
+  badge.textContent = visible.length;
+  // опції фільтра (лічать УСІ алерти, не лише видимі)
   $("alertFilter").innerHTML =
     `<option value="">${esc(t("filter_all"))} (${lastAlerts.length})</option>` +
     kinds.map((k) => `<option value="${esc(k)}" ${k === f ? "selected" : ""}>${esc(metaFor(k).title)} (${byKind.get(k).length})</option>`).join("");
+  // кнопки «Перейти» (глава + offset), «Прийняти варіант», «Ігнорувати»
+  $("alertList").querySelectorAll("button[data-goto-doc]").forEach((b) => {
+    b.onclick = () => gotoAlert(b.dataset.gotoDoc, Number(b.dataset.gotoOff));
+  });
+  $("alertList").querySelectorAll("button[data-accept]").forEach((b) => {
+    b.onclick = () => acceptVariant(b.dataset.accept, b.dataset.variant);
+  });
+  $("alertList").querySelectorAll("button[data-ignore-kind]").forEach((b) => {
+    b.onclick = () => {
+      dismissAlerts((lastAlerts || []).filter((a) => a.kind === b.dataset.ignoreKind));
+      renderAlerts();
+    };
+  });
 }
 
-function fillAlerts(alerts, summary) {
+function fillAlerts(alerts, base) {
   lastAlerts = alerts;
-  $("alertsSummary").textContent = summary;
+  alertSummaryBase = base || "";
   renderAlerts();
 }
 
@@ -1124,10 +1389,16 @@ $("btnCheck").onclick = async () => {
     // style-перевірки — послідовно після основних валідаторів
     const sr = await cmdq("run_style");
     if (sr.err == null && Array.isArray(sr.ok)) alerts.push(...sr.ok);
-    const problems = alerts.filter((a) => metaFor(a.kind).severity === "problem").length;
-    const tips = alerts.length - problems;
-    let sum = t("sum_checks", { d: r.docs, dw: plural(r.docs, I18N[lang].chapters_w), w: r.words, ww: plural(r.words, I18N[lang].words), e: r.entities });
-    sum += " " + t("sum_found", { p: problems, pw: plural(problems, I18N[lang].problem_w), tp: tips, tw: plural(tips, I18N[lang].tip_w) });
+    // QA-07: чесні підсумки — «глав» = лише manuscript; сутності окремо:
+    // досьє автора vs знайдено в тексті. problem/tip рахує renderAlerts
+    // ОДНАКОВО з фільтром (бейдж = фільтр = підсумок).
+    let sum = t("sum_checks", {
+      d: r.manuscript_docs ?? r.docs,
+      dw: plural(r.manuscript_docs ?? r.docs, I18N[lang].chapters_w),
+      w: r.words,
+      ww: plural(r.words, I18N[lang].words),
+    });
+    sum += " " + t("sum_entities", { m: r.entities_manual ?? 0, a: r.entities_auto ?? 0 });
     // глави без time-маркерів — порада (не алерт у БД)
     if (r.timeline_missing.length) {
       alerts.unshift({
@@ -1272,6 +1543,13 @@ const TASK_HUMAN = {
 
 let catalog = [];
 let currentTask = null;
+// QA-08: статус Ollama (null = ще не перевіряли; true/false — результат)
+let ollamaReady = null;
+
+async function loadOllamaStatus() {
+  const r = await cmdq("ollama_status");
+  if (r.err == null && r.ok && typeof r.ok.installed === "boolean") ollamaReady = r.ok.installed;
+}
 
 async function loadCatalog() {
   const r = await cmdq("model_catalog");
@@ -1282,7 +1560,8 @@ async function loadCatalog() {
     const [tk, dk] = TASK_HUMAN[task.id] || [task.label, task.hint];
     const b = document.createElement("button");
     b.className = "task";
-    b.innerHTML = `<span class="t">${esc(t(tk))}</span><span class="h">${esc(t(dk))}</span>`;
+    // QA-08: чесний підпис — це екран налаштувань, виконання задач скоро
+    b.innerHTML = `<span class="t">${esc(t(tk))}</span><span class="h">${esc(t(dk))}</span><span class="soon">${esc(t("models_settings_note"))}</span>`;
     b.onclick = () => selectTask(task);
     task._btn = b;
     $("tasks").appendChild(b);
@@ -1295,7 +1574,7 @@ function selectTask(task, silent = false) {
   if (task._btn) task._btn.classList.add("active");
   const [tk, dk] = TASK_HUMAN[task.id] || [task.label, task.hint];
   $("panel").innerHTML =
-    `<h3>${esc(t(tk))}</h3><div class="hint">${esc(t(dk))}</div>` +
+    `<h3>${esc(t(tk))}</h3><div class="hint">${esc(t(dk))}</div><div class="hint soon">${esc(t("models_settings_note"))}</div>` +
     task.options
       .map(
         (o, j) => `<label class="opt">
@@ -1304,6 +1583,8 @@ function selectTask(task, silent = false) {
         <span class="badges">
           ${j === 0 ? `<span class="badge b-rec">${esc(t("badge_rec"))}</span>` : ""}
           <span class="badge ${o.local ? "b-local" : "b-cloud"}">${o.local ? esc(t("badge_local")) : esc(t("badge_cloud"))}</span>
+          ${o.local && ollamaReady === true ? `<span class="badge b-ollama-ok">${esc(t("ollama_ready"))}</span>` : ""}
+          ${o.local && ollamaReady === false ? `<span class="badge b-ollama-no">${esc(t("ollama_missing"))}</span>` : ""}
         </span>
         <div class="n">${esc(o.note)}</div></span>
       </label>`
@@ -1343,6 +1624,7 @@ async function applyModel() {
   await fillPresets();
   await loadCatalog();
   await loadMeta();          // тексти карток проблем з бекенду
+  loadOllamaStatus().then(() => { if (currentTask) selectTask(currentTask, true); }); // статус Ollama — QA-08
   renderWizardCards();
   applyI18n();               // переклад усіх статичних рядків
 
