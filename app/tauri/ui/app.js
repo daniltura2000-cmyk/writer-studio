@@ -1233,22 +1233,53 @@ function byteIndexToCharIndex(str, byteOffset) {
 }
 
 // Підсвітити рядок textarea (0-based) на 2 секунди зі скролом до нього.
+// Геометрія (FQA-11, уточнення Codex): overlay живе в editorPane
+// (position:relative), але textarea стоїть ПІД editorHead — тому top
+// смуги = ta.offsetTop (позиція textarea всередині pane) + зміщення
+// рядка всередині textarea з урахуванням scroll і паддінгів.
+// lineNo*lineHeight ігнорує soft-wrap — для обгортаних рядків рахуємо
+// висоту префікса тексту до цільового рядка через measure-спані.
 function flashLineNumber(lineNo) {
   const ta = $("editor");
   const text = ta.value;
   if (!text || lineNo < 0) return;
+  const pane = $("editorPane");
   const cs = getComputedStyle(ta);
   const lineHeight = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.7 || 27;
   const padTop = parseFloat(cs.paddingTop) || 0;
+  // 1) висота тексту ДО цільового рядка з урахуванням soft-wrap:
+  //    div-дзеркало без паддінгів/бордерів, ширина = контент textarea,
+  //    хвостовий \n префікса форсуємо нуль-ширинним пробілом (ZWJ),
+  //    бо div на відміну від textarea не малює рядок після кінцевого \n
+  const meas = document.createElement("div");
+  const mcs = meas.style;
+  mcs.position = "absolute"; mcs.visibility = "hidden"; mcs.top = "-9999px";
+  mcs.whiteSpace = "pre-wrap"; mcs.wordWrap = "break-word";
+  mcs.width = (ta.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) + "px";
+  mcs.fontSize = cs.fontSize; mcs.fontFamily = cs.fontFamily;
+  mcs.fontWeight = cs.fontWeight; mcs.fontStyle = cs.fontStyle;
+  mcs.letterSpacing = cs.letterSpacing; mcs.lineHeight = cs.lineHeight;
+  mcs.textTransform = cs.textTransform;
+  const prefix = lineNo > 0 ? text.split("\n").slice(0, lineNo).join("\n") + "\n" : "";
+  meas.textContent = prefix + "\u200B";
+  document.body.appendChild(meas);
+  const prefixH = meas.offsetHeight;
+  document.body.removeChild(meas);
+  // 2) top overlay = позиція textarea в pane + паддінг + висота префікса − скрол.
+  //    ВАЖЛИВО (FQA-11): scrollTop спочатку виставляємо, і лише ПОТІМ читаємо
+  //    його для top смуги — інакше смуга їде на величину зміни скролу.
+  const taTopInPane = ta.getBoundingClientRect().top - pane.getBoundingClientRect().top;
   // скрол так, щоб рядок опинився приблизно посередині видимої області
-  const target = Math.max(0, Math.min(padTop + lineNo * lineHeight - ta.clientHeight / 2, ta.scrollHeight - ta.clientHeight));
+  const lineTopInTa = padTop + prefixH;
+  const target = Math.max(0, Math.min(lineTopInTa - ta.clientHeight / 2, ta.scrollHeight - ta.clientHeight));
   ta.scrollTop = target;
+  const top = taTopInPane + padTop + prefixH - ta.scrollTop;
   const hl = document.createElement("div");
   hl.className = "line-flash";
-  hl.style.top = Math.max(padTop + lineNo * lineHeight - ta.scrollTop, 0) + "px";
+  hl.style.top = Math.max(top, taTopInPane) + "px";
   hl.style.height = Math.ceil(lineHeight) + "px";
-  hl.style.left = (parseFloat(cs.paddingLeft) || 0) + "px";
-  hl.style.right = (parseFloat(cs.paddingRight) || 0) + "px";
+  hl.style.left = (ta.getBoundingClientRect().left - pane.getBoundingClientRect().left) + "px";
+  hl.style.right = (pane.getBoundingClientRect().right - ta.getBoundingClientRect().right) + "px";
   $("editorPane").appendChild(hl);
   setTimeout(() => hl.remove(), 2000);
 }
