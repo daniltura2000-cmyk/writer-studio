@@ -137,6 +137,10 @@ const I18N = {
     fqa09_discard_confirm: "Скинути незбережені зміни?",
     fqa04_save_first: "Зберегти зміни перед перевіркою?",
     fqa04_stale_draft: "Перевірено збережену версію — твої правки ще не збережені",
+    fqa03_age: "вік",
+    fqa03_eye: "колір очей",
+    fqa03_vs: "{e} · {kind}: у главі «{b}» ({db}), у досьє «{a}» ({da})",
+    fqa03_conflict: "{e} · {kind}: у главі «{a}» ({da}) і «{b}» ({db}) — суперечність",
     fqa06_date_prompt: "Дата публікації для «Заплановано» (РРРР-ММ-ДД):",
     fqa11_loc: "Сторінка: глава {n}",
     fqa13_preset_kept: "Напрям застосовується до НОВОГО проєкту. Поточний проєкт залишається без змін (пресет: {x})",
@@ -331,6 +335,10 @@ const I18N = {
     fqa09_discard_confirm: "Discard unsaved changes?",
     fqa04_save_first: "Save changes before checking?",
     fqa04_stale_draft: "The saved version was checked — your edits are not saved yet",
+    fqa03_age: "age",
+    fqa03_eye: "eye color",
+    fqa03_vs: "{e} · {kind}: chapter says “{b}” ({db}), dossier says “{a}” ({da})",
+    fqa03_conflict: "{e} · {kind}: “{a}” ({da}) and “{b}” ({db}) — contradiction",
     fqa06_date_prompt: "Publication date for “Scheduled” (YYYY-MM-DD):",
     fqa11_loc: "Page: chapter {n}",
     fqa13_preset_kept: "The direction applies to a NEW project. The current project stays unchanged (preset: {x})",
@@ -520,6 +528,10 @@ const I18N = {
     fqa09_discard_confirm: "Сбросить несохранённые изменения?",
     fqa04_save_first: "Сохранить изменения перед проверкой?",
     fqa04_stale_draft: "Проверена сохранённая версия — ваши правки ещё не сохранены",
+    fqa03_age: "возраст",
+    fqa03_eye: "цвет глаз",
+    fqa03_vs: "{e} · {kind}: в главе «{b}» ({db}), в досье «{a}» ({da})",
+    fqa03_conflict: "{e} · {kind}: «{a}» ({da}) и «{b}» ({db}) — противоречие",
     fqa06_date_prompt: "Дата публикации для «Запланировано» (ГГГГ-ММ-ДД):",
     fqa11_loc: "Страница: глава {n}",
     fqa13_preset_kept: "Направление применяется к НОВОМУ проекту. Текущий проект остаётся без изменений (пресет: {x})",
@@ -1380,10 +1392,35 @@ async function acceptVariant(canonical, variant) {
   } catch { /* помилку вже показано в cmd() */ }
 }
 
+// FQA-03: людський рядок для fact-алертів замість сирих ключів
+// doc_a/doc_b/kind_label/value_a/value_b. kind_label з ядра — укр.,
+// тому вид факту перекладаємо власним i18n (age/eye_color → t()).
+function factKind(p) {
+  if (p.kind === "age") return t("fqa03_age");
+  if (p.kind === "eye_color") return t("fqa03_eye");
+  return p.kind_label || p.kind || "";
+}
+function factHumanHtml(a) {
+  const p = a.payload || {};
+  const e = String(p.entity || p.entity_name || "");
+  const kind = factKind(p);
+  const va = String(p.value_a ?? ""), vb = String(p.value_b ?? "");
+  const da = String(p.doc_a || p.doc || ""), db = String(p.doc_b || "");
+  // зрізати шлях до імені глави («manuscript/02.md» → «02.md»)
+  const base = (s) => s.split(/[\\/]/).pop();
+  const key = a.kind === "fact-conflict" ? "fqa03_conflict" : "fqa03_vs";
+  return `<div class="v fline">${esc(t(key, {
+    e, kind, a: va, b: vb, da: base(da), db: base(db),
+  }))}</div>`;
+}
+
 function instanceHtml(a) {
   const p = a.payload && typeof a.payload === "object" && !Array.isArray(a.payload) ? a.payload : null;
   let rows;
-  if (p) {
+  if (a.kind === "fact-vs-dossier" || a.kind === "fact-conflict") {
+    // FQA-03: сирі ключі не показуємо взагалі — лише людське порівняння
+    rows = p ? factHumanHtml(a) : "—";
+  } else if (p) {
     // QA-09: службові ключі (message з ядра, технічні offset-и) не показуємо
     rows = Object.entries(p)
       .filter(([k]) => !PK_HIDDEN.has(k))
