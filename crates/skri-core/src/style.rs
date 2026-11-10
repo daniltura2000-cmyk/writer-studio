@@ -81,11 +81,17 @@ pub fn check_text(body: &str) -> Vec<StyleFinding> {
                     continue;
                 }
                 consumed.insert(j);
+                // FQA-11: char_start + word мають вказувати ТОЧНО на знахідку
+                // в тілі: беремо початок ПЕРШОГО слова пари, а word — реальний
+                // фрагмент тіла від першого до кінця другого слова (substring
+                // тіла за [char_start, char_start+word.len()) = word).
+                let cs = sent.start + a.start;
+                let ce = sent.start + b.end;
                 out.push(StyleFinding {
                     kind: "style-tautology".into(),
                     sentence: sent.text.clone(),
-                    char_start: sent.start + b.start,
-                    word: format!("{} {}", a.text, b.text),
+                    char_start: cs,
+                    word: body[cs..ce].to_string(),
                     message: format!(
                         "Тавтологія: «{} {}» — те саме слово підряд (або через одне слово).",
                         a.text, b.text

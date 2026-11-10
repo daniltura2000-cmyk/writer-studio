@@ -23,9 +23,7 @@ fn pipeline(store: &ProjectStore) {
 fn fact_alerts(store: &ProjectStore, kind: &str) -> Vec<(String, serde_json::Value)> {
     let mut stmt = store
         .conn()
-        .prepare(
-            "SELECT payload_json FROM alerts WHERE kind=?1 AND resolved=0 ORDER BY id",
-        )
+        .prepare("SELECT payload_json FROM alerts WHERE kind=?1 AND resolved=0 ORDER BY id")
         .unwrap();
     let rows = stmt.query_map([kind], |r| r.get::<_, String>(0)).unwrap();
     rows.flatten()
@@ -40,13 +38,20 @@ fn qa01_body_starting_with_hash_stays_parseable() {
     let (root, store) = tests_common::tmp_project("qa01-hash");
     let path = root.join("manuscript/01.md");
     std::fs::create_dir_all(root.join("manuscript")).unwrap();
-    std::fs::write(&path, "---\ntitle: QA Канон\nlang: uk\n---\n\nСтарий текст.\n").unwrap();
+    std::fs::write(
+        &path,
+        "---\ntitle: QA Канон\nlang: uk\n---\n\nСтарий текст.\n",
+    )
+    .unwrap();
 
     // «редактор» надсилає тіло БЕЗ початкового порожнього рядка
     let raw = std::fs::read_to_string(&path).unwrap();
     let body = "# QA Канон\n\nНовий текст трьома словами.";
     let out = frontmatter::splice_body(&raw, body);
-    assert!(frontmatter::title_preserved(&raw, &out), "інваріант з'єднання");
+    assert!(
+        frontmatter::title_preserved(&raw, &out),
+        "інваріант з'єднання"
+    );
     std::fs::write(&path, out).unwrap();
 
     // файл парситься, frontmatter на місці
@@ -55,8 +60,16 @@ fn qa01_body_starting_with_hash_stays_parseable() {
     assert_eq!(parsed.meta.get("title").unwrap(), "QA Канон");
     assert!(!after.contains("---#"), "роздільник не злитий з тілом");
     // frontmatter НЕ потрапляє в тіло
-    assert!(!parsed.body.contains("title:"), "метадані в тілі: {:?}", parsed.body);
-    assert!(!parsed.body.contains("lang:"), "метадані в тілі: {:?}", parsed.body);
+    assert!(
+        !parsed.body.contains("title:"),
+        "метадані в тілі: {:?}",
+        parsed.body
+    );
+    assert!(
+        !parsed.body.contains("lang:"),
+        "метадані в тілі: {:?}",
+        parsed.body
+    );
 
     // word_count рахує ТІЛЬКИ тіло, без метаданих
     store.reindex().unwrap();
@@ -142,12 +155,19 @@ fn qa02_age_dossier_vs_chapters_gives_two_alerts() {
     let rep = facts::rebuild(&store).expect("facts rebuild");
 
     // факт витягнутий і з досьє, і з обох глав
-    assert!(rep.facts >= 3, "має бути ≥3 факти (досьє + 2 глави): {rep:?}");
+    assert!(
+        rep.facts >= 3,
+        "має бути ≥3 факти (досьє + 2 глави): {rep:?}"
+    );
     // очікування QA-сценарію: рівно 2 алерти
     let vs = fact_alerts(&store, "fact-vs-dossier");
     let conflict = fact_alerts(&store, "fact-conflict");
     assert_eq!(vs.len(), 1, "глава 40 суперечить досьє 25: {vs:?}");
-    assert_eq!(conflict.len(), 1, "конфлікт 25 ↔ 40 між главами: {conflict:?}");
+    assert_eq!(
+        conflict.len(),
+        1,
+        "конфлікт 25 ↔ 40 між главами: {conflict:?}"
+    );
 
     // payload-и: 40 проти 25 (досьє)
     let v = &vs[0].1;
@@ -155,9 +175,51 @@ fn qa02_age_dossier_vs_chapters_gives_two_alerts() {
     assert_eq!(v.get("value_a").and_then(|x| x.as_str()), Some("40"));
     assert_eq!(v.get("value_b").and_then(|x| x.as_str()), Some("25"));
     assert_eq!(v.get("kind").and_then(|x| x.as_str()), Some("age"));
+    // FQA-03: перехід до глави — цитата речення, offset у тілі, глава-джерело
+    let body_02 = indexer::read_body(&store, "manuscript/02.md").unwrap();
+    assert_eq!(
+        v.get("doc").and_then(|x| x.as_str()),
+        Some("manuscript/02.md"),
+        "doc = глава з відмінним значенням"
+    );
+    assert_eq!(v.get("kind_label").and_then(|x| x.as_str()), Some("вік"));
+    let sent = v
+        .get("sentence")
+        .and_then(|x| x.as_str())
+        .unwrap_or_default();
+    assert!(!sent.trim().is_empty(), "цитата речення непорожня: {v:?}");
+    assert!(sent.contains("40"), "цитата містить факт: {sent:?}");
+    let cs = v.get("char_start").and_then(|x| x.as_i64()).unwrap_or(-1) as usize;
+    assert!(
+        cs < body_02.len(),
+        "offset у межах тіла: {cs} проти {}",
+        body_02.len()
+    );
+    assert_eq!(
+        &body_02[cs..cs + "40".len()],
+        "40",
+        "char_start вказує точно на «40» у тілі глави"
+    );
     let c = &conflict[0].1;
     assert_eq!(c.get("value_a").and_then(|x| x.as_str()), Some("25"));
     assert_eq!(c.get("value_b").and_then(|x| x.as_str()), Some("40"));
+    // FQA-03: у fact-conflict doc = глава з відмінним (другим) значенням
+    assert_eq!(
+        c.get("doc").and_then(|x| x.as_str()),
+        Some("manuscript/02.md"),
+        "глава-джерело конфлікту: {c:?}"
+    );
+    let csent = c
+        .get("sentence")
+        .and_then(|x| x.as_str())
+        .unwrap_or_default();
+    assert!(
+        !csent.trim().is_empty() && csent.contains("40"),
+        "цитата конфлікту: {csent:?}"
+    );
+    let ccs = c.get("char_start").and_then(|x| x.as_i64()).unwrap_or(-1) as usize;
+    assert!(ccs < body_02.len(), "offset у межах тіла: {ccs}");
+    assert_eq!(&body_02[ccs..ccs + "40".len()], "40");
 
     // ідемпотентність: повторний прогін не плодить алертів
     let rep2 = facts::rebuild(&store).unwrap();
@@ -201,9 +263,27 @@ fn qa02_eye_color_dossier_vs_chapter_alerts() {
     assert_eq!(v.get("value_a").and_then(|x| x.as_str()), Some("блакитні"));
     assert_eq!(v.get("value_b").and_then(|x| x.as_str()), Some("зелені"));
     assert_eq!(v.get("kind").and_then(|x| x.as_str()), Some("eye_color"));
+    // FQA-03: перехід — doc = глава з «блакитні», offset точно на слово
+    assert_eq!(
+        v.get("doc").and_then(|x| x.as_str()),
+        Some("manuscript/02.md")
+    );
+    let fsent = v
+        .get("sentence")
+        .and_then(|x| x.as_str())
+        .unwrap_or_default();
+    assert!(fsent.contains("блакитні"), "цитата речення: {fsent:?}");
+    let fbody = indexer::read_body(&store, "manuscript/02.md").unwrap();
+    let fcs = v.get("char_start").and_then(|x| x.as_i64()).unwrap_or(-1) as usize;
+    assert!(fcs < fbody.len(), "offset у межах тіла: {fcs}");
+    assert_eq!(&fbody[fcs..fcs + "блакитні".len()], "блакитні");
     // гл. 1 (зелені) узгоджена з досьє — алертів зайвих немає
     assert_eq!(rep.vs_dossier, 1);
-    assert_eq!(fact_alerts(&store, "fact-conflict").len(), 1, "зелені ↔ блакитні між главами");
+    assert_eq!(
+        fact_alerts(&store, "fact-conflict").len(),
+        1,
+        "зелені ↔ блакитні між главами"
+    );
 }
 
 #[test]
@@ -224,7 +304,10 @@ fn qa02_no_dossier_but_chapter_conflict_still_alerts() {
     pipeline(&store);
     let rep = facts::rebuild(&store).unwrap();
 
-    assert_eq!(rep.conflicts, 1, "конфлікт між главами ловиться і без досьє");
+    assert_eq!(
+        rep.conflicts, 1,
+        "конфлікт між главами ловиться і без досьє"
+    );
     assert_eq!(fact_alerts(&store, "fact-conflict").len(), 1);
     // fact-vs-dossier нема — досьє нема
     assert_eq!(fact_alerts(&store, "fact-vs-dossier").len(), 0);
@@ -262,13 +345,21 @@ fn qa02_case_stub_resolves_one_entity() {
         .iter()
         .filter(|(c, _)| drift::strip_case_suffix(c) == "олександр")
         .collect();
-    assert_eq!(named.len(), 1, "Олександр/Олександра = одна сутність: {ents:?}");
+    assert_eq!(
+        named.len(),
+        1,
+        "Олександр/Олександра = одна сутність: {ents:?}"
+    );
     assert!(
         named[0].1.contains("Олександра"),
         "відмінкова форма в aliases: {}",
         named[0].1
     );
-    assert_eq!(fact_alerts(&store, "name-drift").len(), 0, "без drift-алерту");
+    assert_eq!(
+        fact_alerts(&store, "name-drift").len(),
+        0,
+        "без drift-алерту"
+    );
 }
 
 #[test]
@@ -290,7 +381,10 @@ fn qa02_ru_colors_normalize_to_uk_canon() {
     assert_eq!(f[0].0, "age");
     assert_eq!(f[0].1, "25");
     let f = facts::extract_facts("Йому було 25 років.");
-    assert!(f.iter().any(|(k, v, _)| k == "age" && v == "25"), "з дієсловом між: {f:?}");
+    assert!(
+        f.iter().any(|(k, v, _)| k == "age" && v == "25"),
+        "з дієсловом між: {f:?}"
+    );
 }
 
 // ---------------------------------------------------------------- QA-03
@@ -332,12 +426,13 @@ fn qa03_case_forms_are_one_name_not_drift() {
         .unwrap()
         .filter_map(|r| r.ok())
         .collect();
-    let david: Vec<&(String, String, i64)> = ents
-        .iter()
-        .filter(|(c, _, _)| c == "Дэвид")
-        .collect();
+    let david: Vec<&(String, String, i64)> = ents.iter().filter(|(c, _, _)| c == "Дэвид").collect();
     assert_eq!(david.len(), 1, "рівно одна сутність «Дэвид»: {ents:?}");
-    assert!(david[0].1.contains("Дэвида"), "«Дэвида» в aliases: {}", david[0].1);
+    assert!(
+        david[0].1.contains("Дэвида"),
+        "«Дэвида» в aliases: {}",
+        david[0].1
+    );
     assert!(david[0].2 >= 2, "обидві згадки перешиті на одну сутність");
 }
 
@@ -373,7 +468,10 @@ fn qa02_pronoun_fact_in_next_sentence_attributed() {
             |r| r.get(0),
         )
         .unwrap();
-    assert!(n >= 2, "вік і очі через займенник мають бути витягнуті: {n}");
+    assert!(
+        n >= 2,
+        "вік і очі через займенник мають бути витягнуті: {n}"
+    );
 }
 
 // Локація після прийменника («по Києву») не претендує на факти особи.

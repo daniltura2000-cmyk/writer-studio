@@ -407,9 +407,9 @@ fn raw() -> Vec<Meta> {
             "У тексті трапляються подвійні пробіли — у верстці й на вебплатформах вони виглядають як розрив.",
             "The text contains double spaces — in typesetting and on web platforms they show up as gaps.",
             "В тексте встречаются двойные пробелы — в вёрстке и на веб-платформах они выглядят как разрыв.",
-            "Знайдіть подвійний пробіл за offset у payload і приберіть зайвий пробіл.",
-            "Find the double space by its offset in the payload and remove the extra space.",
-            "Найдите двойной пробел по offset в payload и уберите лишний пробел.",
+            "Увімкни картку і натисни «Перейти» — програма сама покаже місце в тексті; там прибери зайвий пробіл.",
+            "Open the alert card and click “Go to” — the program will show you the exact place in the text; remove the extra space there.",
+            "Раскройте карточку и нажмите «Перейти» — программа сама покажет место в тексте; там уберите лишний пробел.",
         ),
         (
             "style-dash-orphan",

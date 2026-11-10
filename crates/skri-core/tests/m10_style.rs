@@ -38,7 +38,9 @@ fn kazalos_mid_sentence_capital_also_not_candidate() {
     let body = "Він зітхнув: Казалось, кінець. А насправді ніхто не казалось йому про це.";
     let ex = indexer::extract_candidates(body);
     assert!(
-        !ex.candidates.iter().any(|c| c.canonical.to_lowercase() == "казалось"),
+        !ex.candidates
+            .iter()
+            .any(|c| c.canonical.to_lowercase() == "казалось"),
         "«Казалось» всередині речення теж не кандидат"
     );
 }
@@ -79,7 +81,10 @@ fn single_word_needs_three_mentions_or_non_initial() {
         .iter()
         .find(|c| c.canonical == "Збруя")
         .expect("Збруя має лишитись слабким кандидатом для drift");
-    assert!(!hit.strong, "2 згадки на початках речень — не сильний кандидат");
+    assert!(
+        !hit.strong,
+        "2 згадки на початках речень — не сильний кандидат"
+    );
 }
 
 // --- B. style.rs: перевірки стилю і грамотності ---
@@ -124,6 +129,72 @@ fn dash_orphan_is_tip_finding() {
 
 // --- Ідемпотентність run_style_checks і alerts_meta ---
 
+// FQA-11: char_start рахується від ПОЧАТКУ ТІЛА (без frontmatter), і
+// char_start + довжина word вказують ТОЧНО на знахідку в тілі.
+#[test]
+fn fqa11_char_start_is_body_based_and_points_at_finding() {
+    let (root, store) = tmp_project("m10-fqa11");
+    // frontmatter 3 рядки, тіло БЕЗ початкового порожнього рядка
+    std::fs::write(
+        root.join("manuscript/01.md"),
+        "---\ntitle: QA Новий епізод\npub_status: draft\n---\n# QA Новий епізод\n\nВін він повернувся додому.\n",
+    )
+    .unwrap();
+    store.reindex().unwrap();
+    let alerts = style::run_style_checks(root.to_str().unwrap()).unwrap();
+    let t = alerts
+        .iter()
+        .find(|a| a.kind == "style-tautology")
+        .expect("тавтологія «Він він» має бути знайдена");
+    let doc = t.payload["doc"].as_str().expect("doc у payload");
+    let cs = t.payload["char_start"]
+        .as_i64()
+        .expect("char_start у payload") as usize;
+    let word = t.payload["word"].as_str().expect("word у payload");
+    assert_eq!(word, "Він він", "word = реальний фрагмент тіла");
+    // тіло через indexer::read_body — та сама основа, що в інших модулів
+    let body = indexer::read_body(&store, doc).unwrap();
+    assert!(cs + word.len() <= body.len(), "offset у межах тіла: {cs}");
+    assert_eq!(
+        &body[cs..cs + word.len()],
+        word,
+        "substring тіла за offset = слово-знахідка (не frontmatter, не сусіднє слово)"
+    );
+}
+
+// FQA-02: поради style-алертів — людські, без offset/payload-жаргону.
+#[test]
+fn fqa02_style_actions_are_human_no_offset_jargon() {
+    let cat = alerts_meta::catalog_json();
+    let arr = cat.as_array().unwrap();
+    for kind in [
+        "style-double-space",
+        "style-repeat-word",
+        "style-dash-orphan",
+    ] {
+        let e = arr
+            .iter()
+            .find(|e| e["kind"] == kind)
+            .unwrap_or_else(|| panic!("каталог не містить {kind}"));
+        for f in ["action_uk", "action_en", "action_ru"] {
+            let a = e[f].as_str().unwrap_or_default();
+            assert!(
+                !a.to_lowercase().contains("offset") && !a.contains("payload"),
+                "{kind}/{f}: жаргон у пораді: «{a}»"
+            );
+        }
+    }
+    let ds = arr
+        .iter()
+        .find(|e| e["kind"] == "style-double-space")
+        .unwrap();
+    assert!(
+        ds["action_uk"].as_str().unwrap().contains("Перейти"),
+        "порада double-space має вести користувача кнопкою «Перейти»: {}",
+        ds["action_uk"]
+    );
+}
+
 #[test]
 fn run_style_checks_is_idempotent_and_stores_alerts() {
     let (root, store) = tmp_project("m10-style-idem");
@@ -153,10 +224,7 @@ fn run_style_checks_is_idempotent_and_stores_alerts() {
         "style-dash-orphan",
     ] {
         assert!(
-            cat.as_array()
-                .unwrap()
-                .iter()
-                .any(|e| e["kind"] == kind),
+            cat.as_array().unwrap().iter().any(|e| e["kind"] == kind),
             "каталог не містить {kind}"
         );
     }
@@ -193,7 +261,9 @@ fn manual_card_adds_entity_without_alerts() {
     assert_eq!(hit.entity_type, "персонаж");
     assert!(hit.aliases.contains(&"Каль".to_string()));
     assert!(
-        hit.assertions.iter().any(|(a, v, _)| a == "очі" && v == "сірі"),
+        hit.assertions
+            .iter()
+            .any(|(a, v, _)| a == "очі" && v == "сірі"),
         "notes з ключем: значення стають assertions"
     );
 
@@ -216,7 +286,10 @@ fn manual_card_adds_entity_without_alerts() {
         .conn()
         .query_row("SELECT COUNT(*) FROM alerts", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(n_alerts, 0, "ручна картка без конфліктів не має давати алертів");
+    assert_eq!(
+        n_alerts, 0,
+        "ручна картка без конфліктів не має давати алертів"
+    );
 }
 
 #[test]
@@ -227,11 +300,7 @@ fn stopwords_lists_are_loaded_and_russian_input_clean() {
     // рукопис російською: звичайні слова НЕ кандидати, ім'я — кандидат
     let body = "Почему он ушёл, казалось, никто не понял. Всё-таки Иван Петров вернулся.";
     let ex = indexer::extract_candidates(body);
-    let names: Vec<String> = ex
-        .candidates
-        .iter()
-        .map(|c| c.canonical.clone())
-        .collect();
+    let names: Vec<String> = ex.candidates.iter().map(|c| c.canonical.clone()).collect();
     assert!(
         names.iter().all(|n| n == "Иван Петров"),
         "зі стоп-рукопису має лишитись лише ПІБ, а не {names:?}"

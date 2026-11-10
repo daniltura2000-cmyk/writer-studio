@@ -367,8 +367,9 @@ pub fn rebuild(store: &ProjectStore) -> Result<FactsReport> {
         name: String,
         kind_field: String,
         entity_id: Option<i64>,
-        /// (doc_path, value у нижньому регістрі, is_dossier)
-        entries: Vec<(String, String, bool)>,
+        /// запис факту: doc, значення (lower), чи це досьє, цитата речення,
+        /// байтовий offset у тілі глави (FQA-03: для кнопки «Перейти»)
+        entries: Vec<(String, String, bool, String, usize)>,
     }
     let mut groups: HashMap<(String, String), Group> = HashMap::new();
     for f in &unique {
@@ -383,27 +384,32 @@ pub fn rebuild(store: &ProjectStore) -> Result<FactsReport> {
             f.doc_path.clone(),
             f.value.to_lowercase(),
             f.doc_path.starts_with("bible/"),
+            f.sentence.clone(),
+            f.char_start,
         ));
     }
 
     for (_, g) in groups {
         // досьє-канон: (значення → перший документ досьє)
         let mut dossier: HashMap<String, String> = HashMap::new();
-        for (doc, value, is_dossier) in &g.entries {
+        for (doc, value, is_dossier, _, _) in &g.entries {
             if *is_dossier {
                 dossier.entry(value.clone()).or_insert_with(|| doc.clone());
             }
         }
         // глави: значення в порядку першої появи + перший документ
+        // + мета для переходу: цитата речення й offset у тілі (FQA-03)
         let mut chapter_order: Vec<String> = Vec::new();
         let mut chapter_doc: HashMap<String, String> = HashMap::new();
-        for (doc, value, is_dossier) in &g.entries {
+        let mut chapter_meta: HashMap<String, (String, usize)> = HashMap::new();
+        for (doc, value, is_dossier, sentence, char_start) in &g.entries {
             if *is_dossier {
                 continue;
             }
             if !chapter_doc.contains_key(value) {
                 chapter_order.push(value.clone());
                 chapter_doc.insert(value.clone(), doc.clone());
+                chapter_meta.insert(value.clone(), (sentence.clone(), *char_start));
             }
         }
         if chapter_order.is_empty() {
@@ -420,6 +426,7 @@ pub fn rebuild(store: &ProjectStore) -> Result<FactsReport> {
             wrong.sort();
             for value in wrong {
                 let doc_a = chapter_doc[&value].clone();
+                let (sent_a, cs_a) = chapter_meta[&value].clone();
                 let (value_b, doc_b) = dossier.iter().next().unwrap();
                 let payload = serde_json::json!({
                     "entity": g.name,
@@ -429,6 +436,11 @@ pub fn rebuild(store: &ProjectStore) -> Result<FactsReport> {
                     "doc_a": doc_a,
                     "value_b": value_b,
                     "doc_b": doc_b,
+                    // FQA-03: перехід до місця в главі-джерелі (глава з
+                    // відмінним значенням): цитата речення + offset у тілі
+                    "doc": doc_a,
+                    "sentence": sent_a,
+                    "char_start": cs_a,
                     "message": format!(
                         "«{}» у главі «{}»: {} — «{}», а досьє каже «{}». Одне з двох — помилка.",
                         g.name, doc_a, kind_label(&g.kind_field), value, value_b
@@ -443,6 +455,10 @@ pub fn rebuild(store: &ProjectStore) -> Result<FactsReport> {
         if chapter_order.len() >= 2 {
             let value_a = &chapter_order[0];
             let value_b = &chapter_order[1];
+            // FQA-03: глава-джерело конфлікту = глава з ВІДМІННИМ значенням
+            // (value_b — друге, відмінне від першопоявеного, значення)
+            let doc_b = chapter_doc[value_b].clone();
+            let (sent_b, cs_b) = chapter_meta[value_b].clone();
             let payload = serde_json::json!({
                 "entity": g.name,
                 "kind": g.kind_field,
@@ -450,7 +466,10 @@ pub fn rebuild(store: &ProjectStore) -> Result<FactsReport> {
                 "value_a": value_a,
                 "doc_a": chapter_doc[value_a],
                 "value_b": value_b,
-                "doc_b": chapter_doc[value_b],
+                "doc_b": doc_b,
+                "doc": doc_b,
+                "sentence": sent_b,
+                "char_start": cs_b,
                 "message": format!(
                     "Конфлікт між главами: «{}» — {} «{}» в одній главі і «{}» в іншій. Оберіть істинне значення.",
                     g.name, kind_label(&g.kind_field), value_a, value_b
