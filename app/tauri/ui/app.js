@@ -768,7 +768,7 @@ $("wizFinish").onclick = () => {
     if (wizPreset && lastProjOk && lastProjPreset && wizPreset !== lastProjPreset) {
       alert(t("fqa13_preset_kept", { x: lastProjPreset }));
     }
-    openProject(root).then((ok) => { if (!ok) showSetup(false); });
+    openProject(root).then((ok) => { if (ok === false) showSetup(false); }); // "cancelled" → нічого не робимо
   }
   else { if (wizPreset) selectSetupPreset(wizPreset); showSetup(false); }
 };
@@ -837,13 +837,15 @@ async function openProject(path, quiet = false) {
   // FQA-09 (P1): незбережений текст НЕ може зникати при зміні проєкту.
   // Три стани двома confirm: «Зберегти» → save і продовжити;
   // «Скинути» → продовжити; «Скасувати» → взагалі не чіпати проєкт.
+  // Результат: true = відкрито, false = не проєкт skri, "cancelled" =
+  // користувач відмовився (жодних змін стану, callers НЕ показують помилку).
   if (!quiet && currentDoc && dirty) {
     if (confirm(t("fqa09_save_first"))) {
       const r = await cmdq("write_doc", { rel: currentDoc.path, body: editor.value });
-      if (r.err != null) { alert(t("fqa09_save_failed") + "\n" + r.err); return false; }
+      if (r.err != null) { alert(t("fqa09_save_failed") + "\n" + r.err); return "cancelled"; }
       dirty = false;
     } else if (!confirm(t("fqa09_discard_confirm"))) {
-      return false; // скасовано — залишаємось у поточному проєкті з текстом
+      return "cancelled"; // скасовано — залишаємось у поточному проєкті з текстом
     }
   }
   root = path;
@@ -867,6 +869,7 @@ async function openProject(path, quiet = false) {
 
 $("openProj").onclick = async () => {
   const ok = await openProject($("projRoot").value.trim());
+  if (ok === "cancelled") return; // користувач відмовився — НЕ «не проєкт»
   if (!ok) {
     $("setupMsg").textContent = t("setup_notproj");
     $("setupMsg").className = "note err";
@@ -897,6 +900,7 @@ $("setupOpen").onclick = async () => {
   const p = $("setupRoot").value.trim();
   if (!p) { $("setupMsg").textContent = t("setup_need_path"); $("setupMsg").className = "note err"; return; }
   const ok = await openProject(p);
+  if (ok === "cancelled") return; // відмова — без «папка не проєкт»
   if (!ok) { $("setupMsg").textContent = t("setup_notproj"); $("setupMsg").className = "note err"; }
 };
 
@@ -1852,7 +1856,7 @@ async function applyModel() {
     showWizard();
   } else if (root) {
     const ok = await openProject(root);
-    if (!ok) showSetup(false);
+    if (ok === false) showSetup(false); // "cancelled" → залишаємось як є
   } else {
     showSetup(false);
   }
