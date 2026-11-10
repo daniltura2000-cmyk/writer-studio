@@ -141,6 +141,34 @@ const I18N = {
     fqa03_eye: "колір очей",
     fqa03_vs: "{e} · {kind}: у главі «{b}» ({db}), у досьє «{a}» ({da})",
     fqa03_conflict: "{e} · {kind}: у главі «{a}» ({da}) і «{b}» ({db}) — суперечність",
+    fqa06_date_invalid: "Дату не збережено: потрібен реальний день у форматі РРРР-ММ-ДД (наприклад 2026-11-17). Статус не змінено.",
+    opt_gen_lapa_l: "Lapa LLM v0.1.2 — Ollama `uamarchuan/lapa-v0.1.2-instruct`",
+    opt_gen_lapa_n: "найкраща відкрита укр. модель (Gemma3 12B, 128K ctx). Моделі <7B ламають укр. орфографію — тримайте 7B+",
+    opt_gen_llama_l: "Llama 3.1 8B Instruct — Ollama",
+    opt_gen_llama_n: "загальна модель; укр. вихід слабший за Lapa",
+    opt_byok_l: "Хмара (свій API-ключ)",
+    opt_byok_n_full: "опційно, з явним дозволом; ніколи не обирається автоматично",
+    opt_byok_n_short: "опційно",
+    opt_tr_nllb_l: "NLLB-200 (локально)",
+    opt_tr_nllb_n: "baseline укр. MT на 200 мов; реєстр ти/ви перевіряти окремим проходом",
+    opt_tr_lapa_l: "Lapa LLM v0.1.2 — стильовий переклад",
+    opt_tr_lapa_n: "глосарій серії в промпті; для художнього ритму",
+    opt_tr_wturbo_l: "whisper large-v3-turbo (укр. fine-tune Yehor, WER 12.75%)",
+    opt_tr_wturbo_n: "github.com/egorsmkv/speech-recognition-uk",
+    opt_tr_wv3_l: "whisper large-v3 (базовий)",
+    opt_tr_wv3_n: "плутає укр/рос на кириличному міксі → мову задавати вручну",
+    opt_gr_lt_l: "LanguageTool server (локально)",
+    opt_gr_lt_n: "укр + 25+ мов, без хмари; вимкнений Live-Pattern конфлікт не стосується",
+    opt_gr_goroh_l: "Goroh + dmklinger укр. словник",
+    opt_gr_goroh_n: "офлайн-перевірка написання без сервера",
+    opt_sum_lapa_l: "Lapa LLM v0.1.2 — резюме з індексу сутностей",
+    opt_sum_lapa_n: "вхід — не повний текст, а агрегат Index Engine",
+    opt_sum_llama_l: "Llama 3.1 8B Instruct — Ollama",
+    opt_sum_llama_n: "якщо Lapa не встановлена",
+    opt_ss_rules_l: "Правила + FTS5 (без моделей)",
+    opt_ss_rules_n: "детерміновано; embedding-моделі для укр. поки слабкі",
+    opt_ss_e5_l: "multilingual-e5-base (експеримент)",
+    opt_ss_e5_n: "коли з'явиться сильніша укр. embedding-модель",
     fqa06_date_prompt: "Дата публікації для «Заплановано» (РРРР-ММ-ДД):",
     fqa11_loc: "Сторінка: глава {n}",
     fqa13_preset_kept: "Напрям застосовується до НОВОГО проєкту. Поточний проєкт залишається без змін (пресет: {x})",
@@ -339,6 +367,43 @@ const I18N = {
     fqa03_eye: "eye color",
     fqa03_vs: "{e} · {kind}: chapter says “{b}” ({db}), dossier says “{a}” ({da})",
     fqa03_conflict: "{e} · {kind}: “{a}” ({da}) and “{b}” ({db}) — contradiction",
+    fqa06_date_invalid: "Date not saved: a real calendar day in YYYY-MM-DD format is required (e.g. 2026-11-17). Status unchanged.",
+    opt_gen_lapa_l: "Lapa LLM v0.1.2 — Ollama `uamarchuan/lapa-v0.1.2-instruct`",
+    opt_gen_lapa_n: "the best open Ukrainian model (Gemma3 12B, 128K ctx). Models under 7B break Ukrainian spelling — keep 7B+",
+    opt_gen_llama_l: "Llama 3.1 8B Instruct — Ollama",
+    opt_gen_llama_n: "general model; Ukrainian output weaker than Lapa",
+    opt_byok_l: "Cloud (your own API key)",
+    opt_byok_n_full: "optional, with explicit permission; never selected automatically",
+    opt_byok_n_short: "optional",
+    opt_tr_nllb_l: "NLLB-200 (local)",
+    opt_tr_nllb_n: "baseline Ukrainian MT across 200 languages; check the tu/vy register in a separate pass",
+    opt_tr_lapa_l: "Lapa LLM v0.1.2 — stylistic translation",
+    opt_tr_lapa_n: "series glossary in the prompt; for literary rhythm",
+    opt_tr_wturbo_l: "whisper large-v3-turbo (Ukrainian fine-tune by Yehor, WER 12.75%)",
+    opt_tr_wturbo_n: "github.com/egorsmkv/speech-recognition-uk",
+    opt_tr_wv3_l: "whisper large-v3 (base)",
+    opt_tr_wv3_n: "confuses Ukrainian/Russian on a Cyrillic mix → set the language manually",
+    opt_gr_lt_l: "LanguageTool server (local)",
+    opt_gr_lt_n: "Ukrainian + 25+ languages, no cloud; the disabled Live-Pattern conflict does not apply",
+    opt_gr_goroh_l: "Goroh + dmklinger Ukrainian dictionary",
+    opt_gr_goroh_n: "offline spelling check without a server",
+    opt_sum_lapa_l: "Lapa LLM v0.1.2 — summaries from the entity index",
+    opt_sum_lapa_n: "the input is not the full text but an Index Engine aggregate",
+    opt_sum_llama_l: "Llama 3.1 8B Instruct — Ollama",
+    opt_sum_llama_n: "if Lapa is not installed",
+    opt_ss_rules_l: "Rules + FTS5 (no models)",
+    opt_ss_rules_n: "deterministic; Ukrainian embedding models are still weak",
+    opt_ss_e5_l: "multilingual-e5-base (experimental)",
+    opt_ss_e5_n: "until a stronger Ukrainian embedding model appears",
+    epi_no_cold_open: "No cold open — the animation format starts with a cold open (a teaser before the titles)",
+    epi_too_few_turns: "Narrative turns: {turns} < {min_turns} minimum for a 20-minute episode",
+    epi_no_hook: "No hook — a final hook scene for the next episode is required",
+    epi_dialogue_scenes_in_row: "Scene “{scene}”: {streak} dialogue scenes in a row (> {max_dialogue_scenes_in_row}); “characters standing around engaging in lengthy conversations” is a red flag for animation",
+    epi_mute_empty_scene: "Empty scene",
+    epi_mute_visual_pacing_ok: "The story reads without sound",
+    epi_mute_dialogue_heavy_scene: "Half the picture is dialogue; check with the mute test",
+    epi_mute_mute_violation: "The scene “goes dark” without sound: dialogue does the picture’s job",
+    epi_bible_rule_hit: "Bible rule: “{rule}” — indicator words appear in the episode ({hits}). Is this a retcon or a mistake?",
     fqa06_date_prompt: "Publication date for “Scheduled” (YYYY-MM-DD):",
     fqa11_loc: "Page: chapter {n}",
     fqa13_preset_kept: "The direction applies to a NEW project. The current project stays unchanged (preset: {x})",
@@ -532,6 +597,43 @@ const I18N = {
     fqa03_eye: "цвет глаз",
     fqa03_vs: "{e} · {kind}: в главе «{b}» ({db}), в досье «{a}» ({da})",
     fqa03_conflict: "{e} · {kind}: «{a}» ({da}) и «{b}» ({db}) — противоречие",
+    fqa06_date_invalid: "Дата не сохранена: нужен реальный день в формате ГГГГ-ММ-ДД (например 2026-11-17). Статус не изменён.",
+    opt_gen_lapa_l: "Lapa LLM v0.1.2 — Ollama `uamarchuan/lapa-v0.1.2-instruct`",
+    opt_gen_lapa_n: "лучшая открытая укр. модель (Gemma3 12B, 128K ctx). Модели <7B ломают укр. орфографию — держите 7B+",
+    opt_gen_llama_l: "Llama 3.1 8B Instruct — Ollama",
+    opt_gen_llama_n: "общая модель; укр. вывод слабже, чем у Lapa",
+    opt_byok_l: "Облако (свой API-ключ)",
+    opt_byok_n_full: "опционально, с явным разрешением; никогда не выбирается автоматически",
+    opt_byok_n_short: "опционально",
+    opt_tr_nllb_l: "NLLB-200 (локально)",
+    opt_tr_nllb_n: "базовый укр. MT на 200 языков; реестр ты/вы проверять отдельным проходом",
+    opt_tr_lapa_l: "Lapa LLM v0.1.2 — стилевой перевод",
+    opt_tr_lapa_n: "глоссарий серии в промпте; для художественного ритма",
+    opt_tr_wturbo_l: "whisper large-v3-turbo (укр. fine-tune Yehor, WER 12.75%)",
+    opt_tr_wturbo_n: "github.com/egorsmkv/speech-recognition-uk",
+    opt_tr_wv3_l: "whisper large-v3 (базовый)",
+    opt_tr_wv3_n: "путает укр/рос на кириллическом миксе → язык задавать вручную",
+    opt_gr_lt_l: "LanguageTool server (локально)",
+    opt_gr_lt_n: "укр + 25+ языков, без облака; выключенный Live-Pattern конфликт не касается",
+    opt_gr_goroh_l: "Goroh + dmklinger укр. словарь",
+    opt_gr_goroh_n: "офлайн-проверка написания без сервера",
+    opt_sum_lapa_l: "Lapa LLM v0.1.2 — резюме из индекса сущностей",
+    opt_sum_lapa_n: "вход — не полный текст, а агрегат Index Engine",
+    opt_sum_llama_l: "Llama 3.1 8B Instruct — Ollama",
+    opt_sum_llama_n: "если Lapa не установлена",
+    opt_ss_rules_l: "Правила + FTS5 (без моделей)",
+    opt_ss_rules_n: "детерминированно; embedding-модели для укр. пока слабкие",
+    opt_ss_e5_l: "multilingual-e5-base (эксперимент)",
+    opt_ss_e5_n: "когда появится более сильная укр. embedding-модель",
+    epi_no_cold_open: "Нет cold open — анимационный формат начинается с холодного открытия (тизер до титров)",
+    epi_too_few_turns: "Narrative turns: {turns} < {min_turns} минимума для 20-минутного эпизода",
+    epi_no_hook: "Нет hook — финальная сцена-крючок для следующего эпизода обязательна",
+    epi_dialogue_scenes_in_row: "Сцена «{scene}»: {streak} диалоговых сцен подряд (> {max_dialogue_scenes_in_row}); «персонажи стоят и долго разговаривают» — для анимации это красный флаг",
+    epi_mute_empty_scene: "Пустая сцена",
+    epi_mute_visual_pacing_ok: "История читается без звука",
+    epi_mute_dialogue_heavy_scene: "Половина картины — диалог; проверьте mute-тестом",
+    epi_mute_mute_violation: "Сцена «гаснет» без звука: диалог выполняет работу картинки",
+    epi_bible_rule_hit: "Правило библии: «{rule}» — в эпизоде упомянуты слова-индикаторы ({hits}). Это retcon или ошибка?",
     fqa06_date_prompt: "Дата публикации для «Запланировано» (ГГГГ-ММ-ДД):",
     fqa11_loc: "Страница: глава {n}",
     fqa13_preset_kept: "Направление применяется к НОВОМУ проекту. Текущий проект остаётся без изменений (пресет: {x})",
@@ -638,7 +740,11 @@ function applyI18n() {
   $("themeBtn").textContent = document.documentElement.dataset.theme === "light" ? "🌙" : "☀️";
   // динамічні частини, якщо вже завантажені
   if (lastProjOk !== null) setProjState(lastProjOk, lastProjPreset); // FQA-05: статус у шапці
-  if (lastAlerts) loadAlerts(); // FQA-05: meta-тексти і підсумок залежать від мови
+  // FQA-05 (повторно відкрито): існуючі результати перемальовуємо в новій
+  // мові БЕЗ повторного прогону — loadAlerts() замінював повний підсумок
+  // Check-а на drift-only «Found 0 groups…», хоч fact-картки лишались.
+  if (lastAlerts) loadMeta().then(renderAlerts);
+  if (currentDoc) renderDocMeta(currentDoc); // FQA-05: «службові поля» теж мовою UI
   if (lastBoard) renderRelease(lastBoard);
   if (lastCards) renderBible(lastCards);
   if (catalog.length) {
@@ -1264,9 +1370,10 @@ function flashLineNumber(lineNo) {
   const lineHeight = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.7 || 27;
   const padTop = parseFloat(cs.paddingTop) || 0;
   // 1) висота тексту ДО цільового рядка з урахуванням soft-wrap:
-  //    div-дзеркало без паддінгів/бордерів, ширина = контент textarea,
-  //    хвостовий \n префікса форсуємо нуль-ширинним пробілом (ZWJ),
-  //    бо div на відміну від textarea не малює рядок після кінцевого \n
+  //    div-дзеркало без паддінгів/бордерів, ширина = контент textarea.
+  //    FQA-11 (нативний QA): БЕЗ хвостового ZWJ — префікс і так закінчується
+  //    "\n", а ZWJ малював ЗАЙВИЙ рядок після нього → смуга на 1 рядок нижче
+  //    (старий CDP-тест не ловив це, бо будував дзеркало так само).
   const meas = document.createElement("div");
   const mcs = meas.style;
   mcs.position = "absolute"; mcs.visibility = "hidden"; mcs.top = "-9999px";
@@ -1277,7 +1384,7 @@ function flashLineNumber(lineNo) {
   mcs.letterSpacing = cs.letterSpacing; mcs.lineHeight = cs.lineHeight;
   mcs.textTransform = cs.textTransform;
   const prefix = lineNo > 0 ? text.split("\n").slice(0, lineNo).join("\n") + "\n" : "";
-  meas.textContent = prefix + "\u200B";
+  meas.textContent = prefix;
   document.body.appendChild(meas);
   const prefixH = meas.offsetHeight;
   document.body.removeChild(meas);
@@ -1465,11 +1572,21 @@ function metaFor(kind) {
 function renderAlerts() {
   if (!lastAlerts) return;
   gotoRegistry = []; // реєстр кнопок «Перейти» перебудовується щоразу
-  const f = $("alertFilter").value;
-  // FQA-12: ОДИН базовий масив — lastAlerts мінус ігноровані. Бейдж,
-  // опції фільтра і підсумок рахуються з нього (при dismiss — синхронно,
-  // бо все це одна функція renderAlerts).
+  // FQA-12 (повторно відкрито): ПАДІННЯ фільтра ДО підрахунків. Якщо вибраний
+  // вид зник із видимих (усі його картки проігноровано) — повертаємо фільтр
+  // на «Всі» ПЕРЕД обчисленням shown/бейджа/підсумку, інакше shown=[] дає
+  // брехливе зелене «все добре» при живих знахідках інших видів.
   const visible = lastAlerts.filter((a) => !isDismissed(a));
+  const visByKind = new Map();
+  for (const a of visible) {
+    if (!visByKind.has(a.kind)) visByKind.set(a.kind, []);
+    visByKind.get(a.kind).push(a);
+  }
+  let f = $("alertFilter").value;
+  if (f && !visByKind.has(f)) {
+    f = "";
+    $("alertFilter").value = "";
+  }
   const shown = f ? visible.filter((a) => a.kind === f) : visible;
   // групування по kind; спершу problem, потім tip
   const byKind = new Map();
@@ -1482,9 +1599,11 @@ function renderAlerts() {
   // підсумок: статична частина (що перевірено) + чесний «знайдено» по фільтру
   const problems = shown.filter((a) => sevRank(a.kind) === 0).length;
   const tips = shown.length - problems;
-  let sum = alertSummaryBase ? alertSummaryBase + " " : "";
+  // FQA-05: підсумок зберігається СТРУКТУРОВАНО ({key, params} або {raw}) —
+  // зміна мови перемальовує його з t() без повторного прогону перевірки
+  let sum = buildSummary(alertSummaryBase);
   if (shown.length) {
-    sum += t("sum_found", { p: problems, pw: plural(problems, I18N[lang].problem_w), tp: tips, tw: plural(tips, I18N[lang].tip_w) });
+    sum = (sum ? sum + " " : "") + t("sum_found", { p: problems, pw: plural(problems, I18N[lang].problem_w), tp: tips, tw: plural(tips, I18N[lang].tip_w) });
   }
   $("alertsSummary").textContent = sum;
   $("alertList").innerHTML =
@@ -1525,11 +1644,7 @@ function renderAlerts() {
   badge.textContent = shown.length;
   // FQA-12: опції фільтра теж з масиву visible (мінус ігноровані!) —
   // список видів НЕ залежить від активного фільтра, щоб дропдаун не «згортався»
-  const visByKind = new Map();
-  for (const a of visible) {
-    if (!visByKind.has(a.kind)) visByKind.set(a.kind, []);
-    visByKind.get(a.kind).push(a);
-  }
+  // (visByKind обчислено на початку renderAlerts — разом із падінням фільтра)
   const allKinds = [...visByKind.keys()].sort(
     (x, y) => sevRank(x) - sevRank(y) || visByKind.get(y).length - visByKind.get(x).length
   );
@@ -1554,9 +1669,24 @@ function renderAlerts() {
   });
 }
 
+// FQA-05: підсумок перевірки у структурній формі — переклад формується при
+// кожному рендері; {raw} — для сторонніх/тестових рядків без перекладу
+function buildSummary(s) {
+  if (!s) return "";
+  if (s.raw != null) return String(s.raw);
+  if (s.key === "sum_drift_only") {
+    return t("sum_drift_only", { g: s.g, gw: plural(s.g, I18N[lang].drift_gw) });
+  }
+  if (s.key === "sum_checks") {
+    return t("sum_checks", { d: s.d, dw: plural(s.d, I18N[lang].chapters_w), w: s.w, ww: plural(s.w, I18N[lang].words) }) +
+      " " + t("sum_entities", { m: s.m, a: s.a });
+  }
+  return "";
+}
+
 function fillAlerts(alerts, base) {
   lastAlerts = alerts;
-  alertSummaryBase = base || "";
+  alertSummaryBase = typeof base === "string" ? { raw: base } : (base || "");
   renderAlerts();
 }
 
@@ -1583,7 +1713,7 @@ async function loadAlerts() {
     kind: "name-drift",
     payload: { canonical: g.canonical, variants: g.variants },
   }));
-  fillAlerts([...driftAlerts, ...(r.alerts || [])], t("sum_drift_only", { g: r.groups.length, gw: plural(r.groups.length, I18N[lang].drift_gw) }));
+  fillAlerts([...driftAlerts, ...(r.alerts || [])], { key: "sum_drift_only", g: r.groups.length });
 }
 $("alertFilter").onchange = renderAlerts;
 
@@ -1611,13 +1741,7 @@ $("btnCheck").onclick = async () => {
     // QA-07: чесні підсумки — «глав» = лише manuscript; сутності окремо:
     // досьє автора vs знайдено в тексті. problem/tip рахує renderAlerts
     // ОДНАКОВО з фільтром (бейдж = фільтр = підсумок).
-    let sum = t("sum_checks", {
-      d: r.manuscript_docs ?? r.docs,
-      dw: plural(r.manuscript_docs ?? r.docs, I18N[lang].chapters_w),
-      w: r.words,
-      ww: plural(r.words, I18N[lang].words),
-    });
-    sum += " " + t("sum_entities", { m: r.entities_manual ?? 0, a: r.entities_auto ?? 0 });
+    let sum = { key: "sum_checks", d: r.manuscript_docs ?? r.docs, w: r.words, m: r.entities_manual ?? 0, a: r.entities_auto ?? 0 };
     // глави без time-маркерів — порада (не алерт у БД)
     if (r.timeline_missing.length) {
       alerts.unshift({
@@ -1682,19 +1806,44 @@ function renderBarks(rows) {
 function renderEpisode(rel, r) {
   lastEpisode = { rel, r };
   const c = r.check;
+  // FQA-05/FQA16: warnings і verdict'и локалізуємо за машинними кодами
+  // (epi_*), uk і далі бере людський текст з ядра. Немає коду/ключа — fallback.
+  const isUk = lang === "uk";
+  const issueLine = (i) => {
+    const key = "epi_" + (i.code || "");
+    const txt = !isUk && I18N[lang][key] ? t(key, i.params || {}) : i.message;
+    return `<div class="warn">• ${esc(txt)}</div>`;
+  };
+  const issues = c.issues_structured && c.issues_structured.length
+    ? c.issues_structured.map(issueLine).join("")
+    : c.issues.map((i) => `<div class="warn">• ${esc(i)}</div>`).join("");
+  const verdictOf = (m) => {
+    const key = "epi_mute_" + (m.code || "");
+    return !isUk && I18N[lang][key] ? t(key, m.params || {}) : m.verdict;
+  };
+  const ruleHit = (h) => {
+    const key = "epi_" + (h.code || "bible_rule_hit");
+    const txt = !isUk && I18N[lang][key]
+      ? t(key, { rule: h.rule, hits: (h.hits || []).join(", ") })
+      : h.message;
+    return `<div class="warn">${esc(t("ep_rule"))} ${esc(txt)}</div>`;
+  };
+  const ruleLines = r.rule_hits_structured && r.rule_hits_structured.length
+    ? r.rule_hits_structured.map(ruleHit).join("")
+    : (r.rule_hits.length ? r.rule_hits.map((i) => `<div class="warn">${esc(t("ep_rule"))} ${esc(i)}</div>`).join("") : "");
   $("epOut").innerHTML =
     `<div class="card"><b>${esc(t("btn_episode"))}: ${esc(rel)}</b>
       <div class="meta">${c.passed ? "✅ " + esc(t("ep_passed")) : "⚠ " + esc(t("ep_issues"))}</div>
       <div class="meta">${esc(t("ep_cold_open"))}: ${esc(c.cold_open ?? t("none"))} · ${esc(t("ep_turns"))}: ${c.turns} · ${esc(t("ep_hook"))}: ${esc(c.hook ?? t("none"))}</div>
-      ${c.issues.map((i) => `<div class="warn">• ${esc(i)}</div>`).join("")}
-      ${r.rule_hits.length ? r.rule_hits.map((i) => `<div class="warn">${esc(t("ep_rule"))} ${esc(i)}</div>`).join("") : ""}
+      ${issues}
+      ${ruleLines}
     </div>
     <div class="tablewrap"><table class="t"><tr><th>${esc(t("th_scene"))}</th><th>${esc(t("th_action"))}</th><th>${esc(t("th_dialogue"))}</th><th>${esc(t("th_ratio"))}</th><th>${esc(t("th_verdict"))}</th></tr>` +
     r.mute
       .map(
         (m) =>
           `<tr><td>${esc(m.scene)}</td><td>${m.action_lines}</td><td>${m.dialogue_lines}</td>` +
-          `<td>${m.visual_ratio}</td><td>${esc(m.verdict)}</td></tr>`
+          `<td>${m.visual_ratio}</td><td>${esc(verdictOf(m))}</td></tr>`
       )
       .join("") +
     "</table></div>";
@@ -1714,6 +1863,17 @@ $("btnEpisode").onclick = async () => {
    ПУБЛІКАЦІЇ (kanban + прогноз)
    ============================================================ */
 const STATUSES = ["draft", "edit", "buffer", "scheduled", "published"];
+// FQA-06: календарна валідація YYYY-MM-DD (збігається з release::parse_ymd —
+// реальні дні місяця з урахуванням високосного року, без зайвих форматів)
+function isValidYmd(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
+  if (!m) return false;
+  const y = +m[1], mo = +m[2], d = +m[3];
+  if (mo < 1 || mo > 12) return false;
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const dim = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1];
+  return d >= 1 && d <= dim;
+}
 let lastBoard = null;
 
 function renderRelease(b) {
@@ -1764,10 +1924,17 @@ function renderRelease(b) {
         const def = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
         const d = prompt(t("fqa06_date_prompt"), def);
         if (d === null) { sel.value = sel.dataset.status; return; } // скасовано — статус не змінюємо
-        pubDate = d.trim() || undefined;
+        pubDate = d.trim();
+        // FQA-06 (нативний QA): порожня/нереальна дата НЕ переводить главу в
+        // «Заплановано» — чесна помилка, статус лишається попереднім
+        if (!isValidYmd(pubDate)) {
+          sel.value = sel.dataset.status;
+          alert(t("fqa06_date_invalid"));
+          return;
+        }
       }
       try {
-        await cmd("release_set_status", { rel, status, pub_date: pubDate });
+        await cmd("release_set_status", { rel, status, pub_date: pubDate || undefined });
         // FQA-08: якщо ця глава відкрита в редакторі — оновлюємо docMeta
         // (pub_status у шапці редактора мусить показати новий статус)
         if (currentDoc && sameRoot(currentDoc.path, rel)) {
@@ -1778,7 +1945,11 @@ function renderRelease(b) {
           } catch { /* помилку вже показано в cmd() */ }
         }
         await loadRelease();
-      } catch { /* помилку вже показано в cmd(); канбан перечитається */ }
+      } catch {
+        // помилку вже показано в cmd(); FQA-06: канбан перечитується —
+        // селект повертається до РЕАЛЬНОГО статусу на диску
+        try { await loadRelease(); } catch { /* ігноруємо */ }
+      }
     };
   });
 }
@@ -1800,6 +1971,32 @@ const TASK_HUMAN = {
   summarize: ["mt_summarize_t", "mt_summarize_d"],
   "semantic-search": ["mt_semantic_search_t", "mt_semantic_search_d"],
 };
+
+// FQA-05: людські назви/описи ОПЦІЙ каталогу моделей ×3 мови (дані з ядра —
+// лише uk). Ключ = "<задача>/<опція>"; byok-cloud має спільну назву.
+// Відсутній ключ = fallback на uk-текст з ядра (нові опції не губляться).
+const OPT_HUMAN = {
+  "generate-uk/lapa-v0.1.2": ["opt_gen_lapa_l", "opt_gen_lapa_n"],
+  "generate-uk/llama-3.1-8b": ["opt_gen_llama_l", "opt_gen_llama_n"],
+  "generate-uk/byok-cloud": ["opt_byok_l", "opt_byok_n_full"],
+  "translate/nllb-200": ["opt_tr_nllb_l", "opt_tr_nllb_n"],
+  "translate/lapa-v0.1.2": ["opt_tr_lapa_l", "opt_tr_lapa_n"],
+  "translate/byok-cloud": ["opt_byok_l", "opt_byok_n_short"],
+  "transcribe-uk/whisper-large-v3-turbo-uk": ["opt_tr_wturbo_l", "opt_tr_wturbo_n"],
+  "transcribe-uk/whisper-large-v3": ["opt_tr_wv3_l", "opt_tr_wv3_n"],
+  "grammar/languagetool-local": ["opt_gr_lt_l", "opt_gr_lt_n"],
+  "grammar/goroh-dictionary": ["opt_gr_goroh_l", "opt_gr_goroh_n"],
+  "summarize/lapa-v0.1.2": ["opt_sum_lapa_l", "opt_sum_lapa_n"],
+  "summarize/llama-3.1-8b": ["opt_sum_llama_l", "opt_sum_llama_n"],
+  "semantic-search/rules-plus-fts": ["opt_ss_rules_l", "opt_ss_rules_n"],
+  "semantic-search/multilingual-e5": ["opt_ss_e5_l", "opt_ss_e5_n"],
+};
+function optHuman(taskId, o) {
+  const pair = OPT_HUMAN[taskId + "/" + o.id] || (o.id === "byok-cloud" ? ["opt_byok_l", null] : null);
+  return pair
+    ? [pair[0] ? t(pair[0]) : o.label, pair[1] ? t(pair[1]) : o.note]
+    : [o.label, o.note];
+}
 
 let catalog = [];
 let currentTask = null;
@@ -1837,17 +2034,21 @@ function selectTask(task, silent = false) {
     `<h3>${esc(t(tk))}</h3><div class="hint">${esc(t(dk))}</div><div class="hint soon">${esc(t("models_settings_note"))}</div>` +
     task.options
       .map(
-        (o, j) => `<label class="opt">
+        (o, j) => {
+          // FQA-05: назви/описи опцій локалізуємо на фронті (дані ядра — uk)
+          const [ol, on] = optHuman(task.id, o);
+          return `<label class="opt">
         <input type="radio" name="m" ${j === 0 ? "checked" : ""}>
-        <span><span class="l">${esc(o.label)}</span>
+        <span><span class="l">${esc(ol)}</span>
         <span class="badges">
           ${j === 0 ? `<span class="badge b-rec">${esc(t("badge_rec"))}</span>` : ""}
           <span class="badge ${o.local ? "b-local" : "b-cloud"}">${o.local ? esc(t("badge_local")) : esc(t("badge_cloud"))}</span>
           ${o.local && ollamaReady === true ? `<span class="badge b-ollama-ok">${esc(t("ollama_ready"))}</span>` : ""}
           ${o.local && ollamaReady === false ? `<span class="badge b-ollama-no">${esc(t("ollama_missing"))}</span>` : ""}
         </span>
-        <div class="n">${esc(o.note)}</div></span>
-      </label>`
+        <div class="n">${esc(on)}</div></span>
+      </label>`;
+        }
       )
       .join("");
   $("panel").querySelectorAll("input").forEach((i) => (i.onchange = applyModel));

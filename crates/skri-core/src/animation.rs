@@ -8,6 +8,23 @@
 //!    and concludes with a compelling hook"* — структура не перевіряється ніде
 //! - *"watch it with the sound off: wherever the story goes blank..."* —
 //!    для dialogue-free сцен немає ані аналітики бітів, ані зв'язки зі сторібордом
+//!
+//! FQA16 (машинно-читабельні коди): кожен warning і verdict має стабільне
+//! поле `code` + структуровані `params` (числа/імена) для локалізації UI;
+//! український human-текст (`message`/`verdict`/`issues`) зберігається для CLI.
+//! Стабільні коди валідатора епізоду (інтегратор локалізує UI за ними):
+//!
+//! | code                     | де                  | params                                            |
+//! |--------------------------|---------------------|---------------------------------------------------|
+//! | `no_cold_open`           | EpisodeCheck.issues | `{}`                                              |
+//! | `too_few_turns`          | EpisodeCheck.issues | `{turns, min_turns}`                              |
+//! | `no_hook`                | EpisodeCheck.issues | `{}`                                              |
+//! | `dialogue_scenes_in_row` | EpisodeCheck.issues | `{scene, streak, max_dialogue_scenes_in_row}`     |
+//! | `empty_scene`            | MuteBeat            | `{scene, action_lines, dialogue_lines}`           |
+//! | `visual_pacing_ok`       | MuteBeat            | `{scene, visual_ratio}`                           |
+//! | `dialogue_heavy_scene`   | MuteBeat            | `{scene, visual_ratio}`                           |
+//! | `mute_violation`         | MuteBeat            | `{scene, visual_ratio}`                           |
+//! | `bible_rule_hit`         | BibleRuleHit        | `{rule, keywords, hits}`                          |
 
 use crate::store::ProjectStore;
 use crate::Result;
@@ -23,7 +40,29 @@ pub struct EpisodeCheck {
     /// кількість narrative turns (паузи/зсуви між сценами з конфліктом)
     pub turns: usize,
     pub hook: Option<String>,
+    /// людський укр. текст issues (CLI, сумісність) — коди в [`EpisodeCheck::issues_structured`]
     pub issues: Vec<String>,
+    /// FQA16: ті самі issues з машинно-читабельним code + params (для локалізації UI)
+    pub issues_structured: Vec<EpisodeIssue>,
+}
+
+/// Один issue валідатора: стабільний машинний код + параметри + людський текст.
+#[derive(Debug, Clone, Serialize)]
+pub struct EpisodeIssue {
+    /// стабільний код (див. таблицю кодів у шапці модуля)
+    pub code: String,
+    /// структуровані параметри (числа/імена) для підстановки в локалізований шаблон
+    pub params: serde_json::Value,
+    /// існуючий український human-текст (CLI не ламається)
+    pub message: String,
+}
+
+fn issue(code: &str, params: serde_json::Value, message: String) -> EpisodeIssue {
+    EpisodeIssue {
+        code: code.to_string(),
+        params,
+        message,
+    }
 }
 
 /// Пресет структури 20-хв анімаційного епізоду.
@@ -103,26 +142,38 @@ pub fn parse_scenes(body: &str) -> Vec<Scene> {
 /// Валідувати епізод проти формату.
 pub fn validate_episode(body: &str, fmt: &EpisodeFormat) -> EpisodeCheck {
     let scenes = parse_scenes(body);
-    let mut issues = Vec::new();
+    let mut issues: Vec<EpisodeIssue> = Vec::new();
 
     let cold_open = scenes.iter().find(|s| s.cold_open).map(|s| s.name.clone());
     if fmt.cold_open_required && cold_open.is_none() {
-        issues.push("немає cold open — анімаційний формат починається з холодного відкриття (тізер до титрів)".into());
+        issues.push(issue(
+            "no_cold_open",
+            serde_json::json!({}),
+            "немає cold open — анімаційний формат починається з холодного відкриття (тізер до титрів)".into(),
+        ));
     }
 
     // narrative turns = зміни напрямку між сценами: спрощено — кількість переходів
     // сцена→сцена (кожен перехід у 20-хв форматі обов'язково тримає конфлікт)
     let turns = scenes.len().saturating_sub(1);
     if turns < fmt.min_turns {
-        issues.push(format!(
-            "narrative turns: {} < {} мінімуму для 20-хв епізоду",
-            turns, fmt.min_turns
+        issues.push(issue(
+            "too_few_turns",
+            serde_json::json!({ "turns": turns, "min_turns": fmt.min_turns }),
+            format!(
+                "narrative turns: {} < {} мінімуму для 20-хв епізоду",
+                turns, fmt.min_turns
+            ),
         ));
     }
 
     let hook = scenes.iter().find(|s| s.hook).map(|s| s.name.clone());
     if fmt.hook_required && hook.is_none() {
-        issues.push("немає hook — фінальна сцена-гачок для наступного епізоду обов'язкова".into());
+        issues.push(issue(
+            "no_hook",
+            serde_json::json!({}),
+            "немає hook — фінальна сцена-гачок для наступного епізоду обов'язкова".into(),
+        ));
     }
 
     // діалогові сцени підряд — червоний прапор анімації
@@ -131,9 +182,17 @@ pub fn validate_episode(body: &str, fmt: &EpisodeFormat) -> EpisodeCheck {
         if s.dialogue_lines > s.action_lines {
             streak += 1;
             if streak > fmt.max_dialogue_scenes_in_row {
-                issues.push(format!(
-                    "сцена «{}»: {} діалогових сцен підряд (> {}); «characters standing around engaging in lengthy conversations» — для анімації це червоний прапор",
-                    s.name, streak, fmt.max_dialogue_scenes_in_row
+                issues.push(issue(
+                    "dialogue_scenes_in_row",
+                    serde_json::json!({
+                        "scene": s.name,
+                        "streak": streak,
+                        "max_dialogue_scenes_in_row": fmt.max_dialogue_scenes_in_row,
+                    }),
+                    format!(
+                        "сцена «{}»: {} діалогових сцен підряд (> {}); «characters standing around engaging in lengthy conversations» — для анімації це червоний прапор",
+                        s.name, streak, fmt.max_dialogue_scenes_in_row
+                    ),
                 ));
                 streak = 0;
             }
@@ -142,12 +201,15 @@ pub fn validate_episode(body: &str, fmt: &EpisodeFormat) -> EpisodeCheck {
         }
     }
 
+    let issues_structured = issues;
+    let human: Vec<String> = issues_structured.iter().map(|i| i.message.clone()).collect();
     EpisodeCheck {
-        passed: issues.is_empty(),
+        passed: issues_structured.is_empty(),
         cold_open,
         turns,
         hook,
-        issues,
+        issues: human,
+        issues_structured,
     }
 }
 
@@ -162,7 +224,13 @@ pub struct MuteBeat {
     pub dialogue_lines: usize,
     /// action / (action + dialogue)
     pub visual_ratio: f64,
+    /// людський укр. verdict (CLI, сумісність); машинний код — у [`MuteBeat::code`]
     pub verdict: String,
+    /// FQA16: стабільний код verdict (див. таблицю кодів у шапці модуля):
+    /// empty_scene | visual_pacing_ok | dialogue_heavy_scene | mute_violation
+    pub code: String,
+    /// FQA16: структуровані параметри для локалізації UI
+    pub params: serde_json::Value,
 }
 
 pub fn mute_test(body: &str) -> Vec<MuteBeat> {
@@ -175,21 +243,35 @@ pub fn mute_test(body: &str) -> Vec<MuteBeat> {
             } else {
                 s.action_lines as f64 / total as f64
             };
-            let verdict = if total == 0 {
-                "порожня сцена".into()
+            let (code, verdict) = if total == 0 {
+                ("empty_scene", "порожня сцена".to_string())
             } else if ratio >= 0.6 {
-                "гра читається без звуку".into()
+                ("visual_pacing_ok", "гра читається без звуку".to_string())
             } else if ratio >= 0.3 {
-                "половина картини — діалог; перевірте mute-тестом".into()
+                (
+                    "dialogue_heavy_scene",
+                    "половина картини — діалог; перевірте mute-тестом".to_string(),
+                )
             } else {
-                "сцена «гасне» без звуку: діалог виконує роботу картинки".into()
+                (
+                    "mute_violation",
+                    "сцена «гасне» без звуку: діалог виконує роботу картинки".to_string(),
+                )
             };
+            let rounded = (ratio * 100.0).round() / 100.0;
             MuteBeat {
-                scene: s.name,
+                scene: s.name.clone(),
                 action_lines: s.action_lines,
                 dialogue_lines: s.dialogue_lines,
-                visual_ratio: (ratio * 100.0).round() / 100.0,
+                visual_ratio: rounded,
                 verdict,
+                code: code.to_string(),
+                params: serde_json::json!({
+                    "scene": s.name,
+                    "visual_ratio": rounded,
+                    "action_lines": s.action_lines,
+                    "dialogue_lines": s.dialogue_lines,
+                }),
             }
         })
         .collect()
@@ -229,7 +311,35 @@ pub fn bible_rules(store: &ProjectStore) -> Result<Vec<BibleRule>> {
 
 /// Перевірити епізод проти правил біблії: keywords правила з'явились у тексті.
 /// Це ПОВІДОМЛЕННЯ автору («retcon чи помилка?»), не автоматична правка.
+///
+/// FQA16: структурний варіант — [`check_bible_rules_structured`] (code + params);
+/// ця функція лишається людським uk-текстом для CLI.
 pub fn check_bible_rules(store: &ProjectStore, episode_body: &str) -> Result<Vec<String>> {
+    Ok(check_bible_rules_structured(store, episode_body)?
+        .into_iter()
+        .map(|w| w.message)
+        .collect())
+}
+
+/// Структуроване попередження про потрапляння правила біблії в епізод.
+#[derive(Debug, Clone, Serialize)]
+pub struct BibleRuleHit {
+    /// стабільний код: `bible_rule_hit`
+    pub code: String,
+    pub rule: String,
+    /// всі слова-індикатори правила
+    pub keywords: Vec<String>,
+    /// слова-індикатори, знайдені в епізоді
+    pub hits: Vec<String>,
+    /// існуючий український human-текст (CLI не ламається)
+    pub message: String,
+}
+
+/// Перевірити епізод проти правил біблії — машинно-читабельний варіант (FQA16).
+pub fn check_bible_rules_structured(
+    store: &ProjectStore,
+    episode_body: &str,
+) -> Result<Vec<BibleRuleHit>> {
     let rules = bible_rules(store)?;
     let lower = episode_body.to_lowercase();
     let mut warnings = Vec::new();
@@ -237,19 +347,30 @@ pub fn check_bible_rules(store: &ProjectStore, episode_body: &str) -> Result<Vec
         if r.keywords.is_empty() {
             continue;
         }
-        let hits: Vec<&String> = r.keywords.iter().filter(|k| lower.contains(k.as_str())).collect();
+        let hits: Vec<String> = r
+            .keywords
+            .iter()
+            .filter(|k| lower.contains(k.as_str()))
+            .cloned()
+            .collect();
         if !hits.is_empty() {
-            warnings.push(format!(
-                "правило біблії: «{}» — у епізоді згадані слова-індикатори ({}). Це retcon чи помилка?",
-                r.rule,
-                hits.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
-            ));
+            warnings.push(BibleRuleHit {
+                code: "bible_rule_hit".to_string(),
+                rule: r.rule.clone(),
+                keywords: r.keywords.clone(),
+                hits: hits.clone(),
+                message: format!(
+                    "правило біблії: «{}» — у епізоді згадані слова-індикатори ({}). Це retcon чи помилка?",
+                    r.rule,
+                    hits.join(", ")
+                ),
+            });
         }
     }
     Ok(warnings)
 }
 
-/// Зберегти episode-check у БД для дашихборда (можливо пізніше).
+/// Зберегти episode-check у БД для дашиборда (можливо пізніше).
 pub fn record_check(store: &ProjectStore, episode_path: &str, check: &EpisodeCheck) -> Result<()> {
     store.conn().execute(
         "INSERT INTO alerts(kind, entity_id, payload_json, created_at)
@@ -260,6 +381,8 @@ pub fn record_check(store: &ProjectStore, episode_path: &str, check: &EpisodeChe
                 "episode": episode_path,
                 "passed": check.passed,
                 "issues": check.issues,
+                // FQA16: машинно-читабельні коди + params для локалізації UI
+                "issues_structured": check.issues_structured,
             }))?,
             format!("%\"episode\":\"{episode_path}\"%"),
         ],
@@ -358,5 +481,112 @@ mod tests {
         let w = check_bible_rules(&store, ep).unwrap();
         assert_eq!(w.len(), 1);
         assert!(w[0].contains("retcon чи помилка"));
+    }
+
+    // --- FQA16: машинно-читабельні коди ---
+
+    #[test]
+    fn fqa16_episode_issues_have_stable_codes() {
+        let bad = "## СЦЕНА: Початок\nВсе спокійно.\n";
+        let check = validate_episode(bad, &EpisodeFormat::default());
+        let codes: Vec<&str> = check
+            .issues_structured
+            .iter()
+            .map(|i| i.code.as_str())
+            .collect();
+        assert!(codes.contains(&"no_cold_open"), "codes: {codes:?}");
+        assert!(codes.contains(&"too_few_turns"), "codes: {codes:?}");
+        assert!(codes.contains(&"no_hook"), "codes: {codes:?}");
+        // структуровані params (числа)
+        let turns = check
+            .issues_structured
+            .iter()
+            .find(|i| i.code == "too_few_turns")
+            .unwrap();
+        assert_eq!(turns.params.get("turns"), Some(&serde_json::json!(0)));
+        assert_eq!(turns.params.get("min_turns"), Some(&serde_json::json!(2)));
+        // людський uk-текст не зник (CLI не ламається)
+        assert!(check.issues.iter().any(|i| i.contains("cold open")));
+        assert!(check.issues.iter().any(|i| i.contains("hook")));
+        // JSON-серіалізація включає code + params
+        let json = serde_json::to_string(&check).unwrap();
+        assert!(json.contains("\"code\":\"no_cold_open\""), "json: {json}");
+        assert!(json.contains("\"params\""), "json: {json}");
+    }
+
+    #[test]
+    fn fqa16_dialogue_streak_has_code() {
+        let bad = "\
+## СЦЕНА: А\nА: мов.\nА: ще мов.\n
+дія.\n## СЦЕНА: Б\nБ: мов.\nБ: ще мов.\n
+дія.\n## СЦЕНА: В\nВ: мов.\nВ: ще мов.\n
+дія.\n## СЦЕНА: Г\nГ: мов.\nГ: ще мов.\n
+дія.\n";
+        let check = validate_episode(bad, &EpisodeFormat::default());
+        let hit = check
+            .issues_structured
+            .iter()
+            .find(|i| i.code == "dialogue_scenes_in_row")
+            .expect("код dialogue_scenes_in_row");
+        assert_eq!(hit.params.get("streak"), Some(&serde_json::json!(3)));
+        assert_eq!(
+            hit.params.get("max_dialogue_scenes_in_row"),
+            Some(&serde_json::json!(2))
+        );
+        assert!(hit.message.contains("підряд"), "human-текст збережено");
+    }
+
+    #[test]
+    fn fqa16_mute_beats_have_codes() {
+        let talky = "## СЦЕНА: Крамниця\nА: мов.\nБ: мов.\nВ: мов.\nГ: мов.\nдія.\n";
+        let beats = mute_test(talky);
+        assert_eq!(beats[0].code, "mute_violation", "діалогова сцена гасне");
+        assert_eq!(beats[0].verdict, "сцена «гасне» без звуку: діалог виконує роботу картинки");
+        assert_eq!(
+            beats[0].params.get("scene"),
+            Some(&serde_json::json!("Крамниця"))
+        );
+        // валідна сцена: свій код, не violation
+        let good = mute_test("## СЦЕНА: Дія\nМеч впав у пилюку.\nВітер стих.\nПростішало.\n");
+        assert_eq!(good[0].code, "visual_pacing_ok", "ratio={}", good[0].visual_ratio);
+        // JSON-серіалізація включає code + params
+        let json = serde_json::to_string(&beats).unwrap();
+        assert!(json.contains("\"code\":\"mute_violation\""), "json: {json}");
+        assert!(json.contains("\"params\""), "json: {json}");
+    }
+
+    #[test]
+    fn fqa16_bible_rule_hits_structured() {
+        let (root, store) = crate::tests_common::tmp_project("anim-fqa16");
+        std::fs::write(
+            root.join("bible").join("rules.md"),
+            "- Мертві не оживають у цьому світі :: мертвяк, оживання, некромантія\n",
+        ).unwrap();
+        store.reindex().unwrap();
+        let ep = "## СЦЕНА: Бій\nНекромантія сплеснула в темряві.\n";
+        let hits = check_bible_rules_structured(&store, ep).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].code, "bible_rule_hit");
+        assert_eq!(hits[0].rule, "Мертві не оживають у цьому світі");
+        assert!(hits[0].hits.contains(&"некромантія".to_string()));
+        // human-варіант для CLI не змінюється
+        let human = check_bible_rules(&store, ep).unwrap();
+        assert_eq!(human.len(), 1);
+        assert_eq!(human[0], hits[0].message);
+        // record_check зберігає issues_structured у payload
+        let check = validate_episode(ep, &EpisodeFormat::default());
+        record_check(&store, "manuscript/ep1.md", &check).unwrap();
+        let payload: String = store
+            .conn()
+            .query_row(
+                "SELECT payload_json FROM alerts WHERE kind='episode-check' LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            payload.contains("issues_structured") && payload.contains("\"code\""),
+            "payload: {payload}"
+        );
     }
 }

@@ -243,8 +243,10 @@ fn model_router_auto_and_manual_buttons() {
 
 #[test]
 fn frontmatter_body_offset_matches() {
+    // FQA-11: тіло починається на ПЕРШОМУ символі тексту (переноси після
+    // `---` зрізані) — offset-и ядра збігаються з редактором
     let doc = "---\ntitle: X\n---\n\nТіло";
     let p = frontmatter::parse(doc);
-    assert_eq!(&doc[p.body_start..], "\n\nТіло");
+    assert_eq!(&doc[p.body_start..], "Тіло");
     let _ = Path::new("");
 }

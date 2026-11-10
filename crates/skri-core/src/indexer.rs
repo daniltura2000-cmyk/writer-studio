@@ -325,8 +325,18 @@ fn register(
 
 /// Просканувати рукопис проєкту: перебудувати entities+mentions (source=auto*)
 /// і прогнати drift-детектор. Слабкі кандидати, що не злилися з сильними, видаляються.
+///
+/// FQA14 (ідемпотентність згадок): таблиця `mentions` ПОВНІСТЮ перебудовується
+/// щоразу (єдиний записувач — ця функція). Раніше авто-сутності видалялись
+/// каскадом, але сутність, що збігається з manual-досьє («Олександр»), була
+/// крізь `upsert_entity` і її СТАРІ згадки лишались — повторні Check накопичували
+/// й множили збіги (26 → 30 → 32 при незмінених файлах). Тепер згадки = реальна
+/// кількість входжень форм імені у главу, повторні rebuild/reindex/check
+/// число не змінюють.
 pub fn scan_project(store: &ProjectStore) -> Result<ScanReport> {
     let conn = store.conn();
+    // FQA14: чистий перебудов — згадки НЕ накопичуються між прогонами
+    conn.execute("DELETE FROM mentions", [])?;
     conn.execute("DELETE FROM entities WHERE source LIKE 'auto%'", [])?;
     // авто-алерти перебудовуються щоразу (assertion-conflict біблії це не стосується)
     conn.execute("DELETE FROM alerts WHERE kind='name-drift'", [])?;
@@ -362,8 +372,63 @@ pub fn scan_project(store: &ProjectStore) -> Result<ScanReport> {
     // drift по всіх auto-сутностях (вкл. слабкі — ловить опечатку при першій згадці);
     // алерти створює сам drift::detect
     report.drift_groups = drift::detect(conn)?.len();
-    // слабкі, що не злилися з сильними — шум; згадки каскадно видаляються
-    conn.execute("DELETE FROM entities WHERE source='auto-weak'", [])?;
+    // FQA14: слабкі, що не злилися з сильними — шум у БІБЛІЇ, але їхні згадки —
+    // реальні входження форм імені. Якщо нормалізована основа weak-форми
+    // («Олександра» → «олександр») збігається з manual-досьє, згадка
+    // перешивається на нього (форма додається в aliases без дубля) — інакше
+    // повторний скан «втрачав» і потім знову накопичував входження форм імені.
+    {
+        let weak: Vec<(i64, String)> = {
+            let mut stmt =
+                conn.prepare("SELECT id, canonical_form FROM entities WHERE source='auto-weak'")?;
+            let rows: Vec<(i64, String)> = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .filter_map(|r| r.ok())
+                .collect();
+            rows
+        };
+        let manuals: Vec<(i64, String)> = {
+            let mut stmt = conn
+                .prepare("SELECT id, canonical_form FROM entities WHERE source='manual'")?;
+            let rows: Vec<(i64, String)> = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .filter_map(|r| r.ok())
+                .collect();
+            rows
+        };
+        for (wid, wname) in weak {
+            let norm = drift::strip_case_suffix(&wname);
+            let target = manuals
+                .iter()
+                .find(|(_, n)| drift::strip_case_suffix(n) == norm)
+                .map(|(id, _)| *id);
+            if let Some(mid) = target {
+                conn.execute(
+                    "UPDATE mentions SET entity_id=?2 WHERE entity_id=?1",
+                    params![wid, mid],
+                )?;
+                // форма → aliases manual-сутності (без дубля)
+                let current: String = conn
+                    .query_row(
+                        "SELECT aliases_json FROM entities WHERE id=?1",
+                        params![mid],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or_else(|_| "[]".to_string());
+                let mut aliases: Vec<String> =
+                    serde_json::from_str(&current).unwrap_or_default();
+                if !aliases.iter().any(|a| a.eq_ignore_ascii_case(&wname)) {
+                    aliases.push(wname.clone());
+                    conn.execute(
+                        "UPDATE entities SET aliases_json=?2 WHERE id=?1",
+                        params![mid, serde_json::to_string(&aliases)?],
+                    )?;
+                }
+            }
+            // слабка сутність у біблію не потрапляє; незлі згадки каскадно зникають
+            conn.execute("DELETE FROM entities WHERE id=?1", params![wid])?;
+        }
+    }
     Ok(report)
 }
 

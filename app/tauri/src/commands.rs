@@ -76,6 +76,9 @@ pub struct EpisodeReport {
     pub check: animation::EpisodeCheck,
     pub mute: Vec<animation::MuteBeat>,
     pub rule_hits: Vec<String>,
+    /// FQA16: машинно-читабельні попадання правил біблії (коди + params)
+    /// для локалізації UI; `rule_hits` лишається для сумісності.
+    pub rule_hits_structured: Vec<animation::BibleRuleHit>,
 }
 
 type CmdResult<T> = Result<T, String>;
@@ -116,8 +119,10 @@ fn ensure_rel_inside_root(rel: &str) -> CmdResult<()> {
 /// Повний конвеєр індексування (те саме, що `skri index`).
 fn full_pipeline(store: &ProjectStore) -> CmdResult<()> {
     store.reindex().map_err(|e| e.to_string())?;
-    indexer::scan_project(store).map_err(|e| e.to_string())?;
+    // FQA14: sync_bible ПЕРЕД scan_project — manual-сутності мають існувати
+    // до скану, інакше згадки досьє губляться на першому прогоні.
     bible::sync_bible(store).map_err(|e| e.to_string())?;
+    indexer::scan_project(store).map_err(|e| e.to_string())?;
     bible::merge_auto_into_manual(store).map_err(|e| e.to_string())?;
     narrative::scan_dialogue(store).map_err(|e| e.to_string())?;
     Ok(())
@@ -227,8 +232,9 @@ pub fn project_info(root: String) -> CmdResult<serde_json::Value> {
 pub fn run_index(root: String) -> CmdResult<IndexReport> {
     let store = open(&root)?;
     let stats = store.reindex().map_err(|e| e.to_string())?;
-    let scan = indexer::scan_project(&store).map_err(|e| e.to_string())?;
+    // FQA14: sync_bible ПЕРЕД scan_project (див. full_pipeline)
     let bib = bible::sync_bible(&store).map_err(|e| e.to_string())?;
+    let scan = indexer::scan_project(&store).map_err(|e| e.to_string())?;
     let merged = bible::merge_auto_into_manual(&store).map_err(|e| e.to_string())?;
     Ok(IndexReport {
         docs: stats.docs,
@@ -353,7 +359,9 @@ pub fn add_dossier(
     bible::add_manual_card(&store.root.to_string_lossy(), &card)
         .map_err(|e| format!("не вдалося зберегти досьє: {e}"))?;
     store.reindex().map_err(|e| e.to_string())?;
+    // FQA14: свіжого досьє одразу перераховуємо (sync_bible → scan_project)
     bible::sync_bible(&store).map_err(|e| e.to_string())?;
+    indexer::scan_project(&store).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -378,8 +386,9 @@ pub fn run_style(root: String) -> CmdResult<Vec<AlertDto>> {
 pub fn run_drift(root: String) -> CmdResult<DriftReport> {
     let store = open(&root)?;
     store.reindex().map_err(|e| e.to_string())?;
-    indexer::scan_project(&store).map_err(|e| e.to_string())?;
+    // FQA14: sync_bible ПЕРЕД scan_project (див. full_pipeline)
     bible::sync_bible(&store).map_err(|e| e.to_string())?;
+    indexer::scan_project(&store).map_err(|e| e.to_string())?;
     let groups = drift::detect(store.conn()).map_err(|e| e.to_string())?;
     let mut alerts = Vec::new();
     let mut stmt = store
@@ -430,7 +439,9 @@ pub fn episode_validate(root: String, rel: String) -> CmdResult<EpisodeReport> {
     let check = animation::validate_episode(&body, &fmt);
     let mute = animation::mute_test(&body);
     let rule_hits = animation::check_bible_rules(&store, &body).map_err(|e| e.to_string())?;
-    Ok(EpisodeReport { check, mute, rule_hits })
+    let rule_hits_structured =
+        animation::check_bible_rules_structured(&store, &body).map_err(|e| e.to_string())?;
+    Ok(EpisodeReport { check, mute, rule_hits, rule_hits_structured })
 }
 
 /// Зберегти вибір моделі задачі (кнопка в каталозі) → .skri/settings.json.
@@ -709,7 +720,11 @@ pub fn release_board(root: String) -> CmdResult<ReleaseBoard> {
 }
 
 /// Перехід статусу глави (пише pub_status прямо у frontmatter файлу).
-#[tauri::command]
+/// FQA-06: rename_all = "snake_case" — Tauri 2 за замовчуванням очікує
+/// camelCase аргументи (pubDate), тож JS-ключ `pub_date` мовчно губився
+/// (None) і дата «Заплановано» не зберігалася. З snake_case JS і Rust
+/// домовляються про однакові імена.
+#[tauri::command(rename_all = "snake_case")]
 pub fn release_set_status(
     root: String,
     rel: String,
@@ -766,8 +781,9 @@ pub struct CheckReport {
 pub fn run_checks(root: String) -> CmdResult<CheckReport> {
     let store = open(&root)?;
     let st = store.reindex().map_err(|e| e.to_string())?;
-    let scan = indexer::scan_project(&store).map_err(|e| e.to_string())?;
+    // FQA14: sync_bible ПЕРЕД scan_project (див. full_pipeline)
     let bib = bible::sync_bible(&store).map_err(|e| e.to_string())?;
+    let scan = indexer::scan_project(&store).map_err(|e| e.to_string())?;
     let merged = bible::merge_auto_into_manual(&store).map_err(|e| e.to_string())?;
     narrative::scan_dialogue(&store).map_err(|e| e.to_string())?;
     let groups = drift::detect(store.conn()).map_err(|e| e.to_string())?;

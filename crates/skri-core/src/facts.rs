@@ -295,22 +295,49 @@ pub fn rebuild(store: &ProjectStore) -> Result<FactsReport> {
         // Факти часто стоять у сусідньому реченні через займенник:
         // «Олександр йшов. Йому 25 років.» — тому вікно атрибуції =
         // абзац (блок рядків без порожнього розділювача), а не одне речення.
+        //
+        // FQA15 (хибні fact-алерти через абзац-атрибуцію): факт належить
+        // ЯВНОМУ суб'єкту СВОЄГО речення; займенникове речення без явного
+        // суб'єкта успадковує ЛИШЕ від однозначного (єдиного в абзаці)
+        // явного суб'єкта. Якщо в абзаці (або в одному реченні) 2+ різних
+        // явних суб'єкти — факти чесно пропускаються, нікому не приписуються
+        // («Олександр має 25 років…» не потрапляє і Марії, і навпаки).
         for para in split_paragraphs(&body) {
             let sents = crate::indexer::sentences(&para.text);
-            // сутності з ГОЛОЮ згадкою десь у абзаці (прийменникові
+            // явні суб'єкти: ГОЛА згадка сутності в реченні (прийменникові
             // «по Києву»/«у Львові» — не претенденти на факти особи)
-            let mut para_ents: Vec<&EntityForms> = Vec::new();
+            let mut sent_explicit: Vec<Vec<&EntityForms>> = Vec::with_capacity(sents.len());
+            let mut para_explicit: Vec<&EntityForms> = Vec::new();
             for sent in &sents {
                 let toks = crate::indexer::tokenize(&sent.text);
+                let mut here: Vec<&EntityForms> = Vec::new();
                 for (e, bare) in sentence_mentions(&sent.text, &toks, &ents) {
-                    if bare && !para_ents.iter().any(|x| x.id == e.id) {
-                        para_ents.push(e);
+                    if bare && !here.iter().any(|x| x.id == e.id) {
+                        here.push(e);
                     }
                 }
+                for e in &here {
+                    if !para_explicit.iter().any(|x| x.id == e.id) {
+                        para_explicit.push(e);
+                    }
+                }
+                sent_explicit.push(here);
             }
-            for sent in &sents {
+            for (si, sent) in sents.iter().enumerate() {
+                // кому атрибуціювати факти ЦЬОГО речення:
+                // - рівно один явний суб'єкт речення → йому;
+                // - немає явного суб'єкта, але в абзаці рівно один явний
+                //   суб'єкт (однозначний «останній суб'єкт») → успадковується;
+                // - 2+ явних суб'єкти в реченні або в абзаці → не нікому.
+                let owners: Vec<&EntityForms> = if sent_explicit[si].len() == 1 {
+                    vec![sent_explicit[si][0]]
+                } else if sent_explicit[si].is_empty() && para_explicit.len() == 1 {
+                    vec![para_explicit[0]]
+                } else {
+                    Vec::new()
+                };
                 for (kind, value, off) in extract_facts(&sent.text) {
-                    for e in &para_ents {
+                    for e in &owners {
                         facts.push(Fact {
                             doc_path: rel.clone(),
                             char_start: para.start + sent.start + off,

@@ -210,8 +210,10 @@ fn cmd_index(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "✔ документів: {}, слів: {}, переіндексовано: {}",
         stats.docs, stats.words, stats.reindexed
     );
-    let scan = indexer::scan_project(&store)?;
+    // FQA14: біблія (джерело правди) синхронізується ДО скану рукопису —
+    // інакше manual-сутності ще не існують і згадки їхніх форм губляться/накопичуються
     let bib = bible::sync_bible(&store)?;
+    let scan = indexer::scan_project(&store)?;
     let merged = bible::merge_auto_into_manual(&store)?;
     println!(
         "✔ кандидатів-сутностей: {}, згадок: {}, drift-груп: {}",
@@ -227,8 +229,9 @@ fn cmd_index(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 fn cmd_bible(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let store = open_project(args);
     store.reindex()?;
-    indexer::scan_project(&store)?;
+    // FQA14: біблія перед сканом (див. cmd_index)
     bible::sync_bible(&store)?;
+    indexer::scan_project(&store)?;
     bible::merge_auto_into_manual(&store)?;
     for c in bible::cards(&store)? {
         println!("\n● {} [{}] — {} згадок", c.canonical, c.entity_type, c.mention_total);
@@ -1843,8 +1846,9 @@ fn cmd_facts(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let store = open_at(&dir);
     // конвеєр індексування (передумова rebuild): entities/aliases у БД
     store.reindex()?;
-    indexer::scan_project(&store)?;
+    // FQA14: біблія перед сканом (див. cmd_index)
     bible::sync_bible(&store)?;
+    indexer::scan_project(&store)?;
     bible::merge_auto_into_manual(&store)?;
     let rep = facts::rebuild(&store)?;
 

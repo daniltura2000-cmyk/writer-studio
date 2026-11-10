@@ -395,13 +395,20 @@ fn fallback_title(rel: &str) -> String {
 }
 
 /// "YYYY-MM-DD" → epoch-секунди (UTC опівнічі).
+/// FQA-06: валідація КАЛЕНДАРНА — 2026-02-31 більше не проходить
+/// (кількість днів у місяці з урахуванням високосного року).
 pub fn parse_ymd(s: &str) -> Option<i64> {
     let s = s.trim().trim_matches('"');
     let mut it = s.split('-');
     let y: i64 = it.next()?.parse().ok()?;
     let m: i64 = it.next()?.parse().ok()?;
     let d: i64 = it.next()?.parse().ok()?;
-    if it.next().is_some() || !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+    if it.next().is_some() || !(1..=12).contains(&m) {
+        return None;
+    }
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let dim = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][(m - 1) as usize];
+    if !(1..=dim).contains(&d) {
         return None;
     }
     Some(days_from_civil(y, m, d) * 86_400)

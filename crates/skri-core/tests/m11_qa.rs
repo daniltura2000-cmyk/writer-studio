@@ -12,11 +12,12 @@ use skri_core::bible::{add_manual_card, ManualCard};
 use skri_core::store::ProjectStore;
 use skri_core::{bible, drift, facts, frontmatter, indexer, tests_common};
 
-/// Повний конвеєр індексування (те саме, що `skri index`).
+/// Повний конвеєр індексування (те саме, що `skri index`; FQA14: біблія —
+/// джерело правди — синхронізується ДО скану рукопису).
 fn pipeline(store: &ProjectStore) {
     store.reindex().expect("reindex");
-    indexer::scan_project(store).expect("scan");
     bible::sync_bible(store).expect("sync_bible");
+    indexer::scan_project(store).expect("scan");
     bible::merge_auto_into_manual(store).expect("merge");
 }
 
@@ -86,13 +87,17 @@ fn qa01_body_starting_with_hash_stays_parseable() {
 
 #[test]
 fn qa01_body_with_leading_newline_is_stable() {
-    // тіло З порожнім першим рядком — теж зберігається коректно
+    // FQA-11: тіло з початковими переносами нормалізується (parse і splice
+    // symmetric) — save→read→save байт-стабільний, редактор без «фантомних»
+    // порожніх рядків після роздільника
     let raw = "---\ntitle: T\n---\n";
     let out = frontmatter::splice_body(raw, "\n\nТіло.");
-    assert_eq!(out, "---\ntitle: T\n---\n\nТіло.");
+    assert_eq!(out, "---\ntitle: T\n---\nТіло.");
     let p = frontmatter::parse(&out);
     assert_eq!(p.meta.get("title").unwrap(), "T");
-    assert!(p.body.contains("Тіло."));
+    assert_eq!(p.body, "Тіло.");
+    // повторне збереження — байт-ідентичний файл
+    assert_eq!(frontmatter::splice_body(&out, "\n\nТіло."), out);
 }
 
 #[test]
@@ -495,4 +500,274 @@ fn qa02_prep_location_gets_no_facts() {
         )
         .unwrap();
     assert_eq!(n, 0, "«Києву» після прийменника не отримує фактів особи");
+}
+
+// ---------------------------------------------------------------- FQA14
+// FQA14 (P2): неідемпотентна кількість згадок ручного персонажа — повторні
+// Check/index накопичували збіги для manual-сутності (26 → 30 → 32 при
+// незмінених файлах). Очікування: згадки = реальна кількість входжень форм
+// імені у главу; повторні rebuild/reindex/check число не змінюють.
+#[test]
+fn fqa14_manual_mentions_idempotent_across_rebuilds() {
+    let (root, store) = tests_common::tmp_project("fqa14-mentions");
+    std::fs::create_dir_all(root.join("manuscript")).unwrap();
+    add_manual_card(
+        &root.to_string_lossy(),
+        &ManualCard {
+            name: "Олександр".into(),
+            aliases: vec![],
+            kind: "персонаж".into(),
+            notes: "Йому 25 років. Його очі зелені.".into(),
+        },
+    )
+    .unwrap();
+    // 2 глави по 1 входженню «Олександр»
+    std::fs::write(
+        root.join("manuscript/01.md"),
+        "---\ntitle: Г1\n---\n\nОлександр увійшов до кімнати.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("manuscript/02.md"),
+        "---\ntitle: Г2\n---\n\nОлександр глянув у дзеркало.\n",
+    )
+    .unwrap();
+
+    let count = |store: &ProjectStore| -> Vec<(String, i64)> {
+        let mut stmt = store
+            .conn()
+            .prepare(
+                "SELECT d.path, COUNT(*) FROM mentions m
+                 JOIN entities e ON e.id = m.entity_id
+                 JOIN docs d ON d.id = m.doc_id
+                 WHERE e.canonical_form = 'Олександр'
+                 GROUP BY d.path ORDER BY d.path",
+            )
+            .unwrap();
+        stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+    };
+    let aliases = |store: &ProjectStore| -> String {
+        store
+            .conn()
+            .query_row(
+                "SELECT aliases_json FROM entities WHERE canonical_form='Олександр'",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .unwrap()
+    };
+
+    pipeline(&store);
+    let first = count(&store);
+    assert_eq!(
+        first,
+        vec![
+            ("manuscript/01.md".to_string(), 1),
+            ("manuscript/02.md".to_string(), 1)
+        ],
+        "по 1 реальній згадці на главу: {first:?}"
+    );
+    let aliases_first = aliases(&store);
+
+    // rebuild ×3 — число стабільне
+    pipeline(&store);
+    pipeline(&store);
+    assert_eq!(
+        count(&store),
+        first,
+        "повторні rebuild не змінюють кількість згадок manual-сутності"
+    );
+    assert_eq!(
+        aliases(&store),
+        aliases_first,
+        "aliases/форми не дублюються між перебудовами"
+    );
+
+    // збереження другого досьє («Марія») не змінює лічильник першого
+    add_manual_card(
+        &root.to_string_lossy(),
+        &ManualCard {
+            name: "Марія".into(),
+            aliases: vec![],
+            kind: "персонаж".into(),
+            notes: "Їй 40 років. Її очі блакитні.".into(),
+        },
+    )
+    .unwrap();
+    pipeline(&store);
+    assert_eq!(
+        count(&store),
+        first,
+        "нове досьє не множить згадки іншої сутності"
+    );
+    // сумарно рівно 2 згадки (жодного накопичення/подвоєння)
+    let total: i64 = store
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM mentions m JOIN entities e ON e.id=m.entity_id
+             WHERE e.canonical_form='Олександр'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(total, 2, "разом 2 згадки, не 26/30/32");
+}
+
+// ---------------------------------------------------------------- FQA15
+// FQA15 (P2): абзац-атрибуція приписувала факти ВСІМ персонажам абзацу.
+// (а) два імена, два речення, один абзац — кожен факт своєму персонажу,
+// 0 хибних алертів (текст узгоджений з каноном).
+#[test]
+fn fqa15_two_characters_each_fact_to_own_entity() {
+    let (root, store) = tests_common::tmp_project("fqa15-two-chars");
+    std::fs::create_dir_all(root.join("manuscript")).unwrap();
+    add_manual_card(
+        &root.to_string_lossy(),
+        &ManualCard {
+            name: "Олександр".into(),
+            aliases: vec![],
+            kind: "персонаж".into(),
+            notes: "Йому 25 років. Його очі зелені.".into(),
+        },
+    )
+    .unwrap();
+    add_manual_card(
+        &root.to_string_lossy(),
+        &ManualCard {
+            name: "Марія".into(),
+            aliases: vec![],
+            kind: "персонаж".into(),
+            notes: "Їй 40 років. Її очі блакитні.".into(),
+        },
+    )
+    .unwrap();
+    // текст УЗГОДЖЕНИЙ з каноном — жодних алертів бути не має
+    std::fs::write(
+        root.join("manuscript/004-QA Два персонажі.md"),
+        "---\ntitle: QA Два персонажі\n---\n\n# QA Два персонажі\n\nОлександр має 25 років, його очі зелені. Марія має 40 років, її очі блакитні.\n",
+    )
+    .unwrap();
+
+    pipeline(&store);
+    facts::rebuild(&store).unwrap();
+
+    let vs = fact_alerts(&store, "fact-vs-dossier");
+    let conflict = fact_alerts(&store, "fact-conflict");
+    assert!(
+        vs.is_empty(),
+        "узгоджений текст не має давати fact-vs-dossier: {vs:?}"
+    );
+    assert!(
+        conflict.is_empty(),
+        "узгоджений текст не має давати fact-conflict: {conflict:?}"
+    );
+
+    // кожен факт — своєму персонажу, без крос-атрибуції
+    let ents = |store: &ProjectStore, entity: &str| -> Vec<(String, String)> {
+        let mut stmt = store
+            .conn()
+            .prepare(
+                "SELECT kind, value FROM extracted_facts
+                 WHERE doc_path LIKE 'manuscript%' AND entity = ?1",
+            )
+            .unwrap();
+        stmt.query_map([entity], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+    };
+    let oleksandr = ents(&store, "Олександр");
+    let mariia = ents(&store, "Марія");
+    assert!(
+        oleksandr.contains(&("age".to_string(), "25".to_string()))
+            && oleksandr.contains(&("eye_color".to_string(), "зелені".to_string())),
+        "факти «25/зелені» — Олександру: {oleksandr:?}"
+    );
+    assert!(
+        mariia.contains(&("age".to_string(), "40".to_string()))
+            && mariia.contains(&("eye_color".to_string(), "блакитні".to_string())),
+        "факти «40/блакитні» — Марії: {mariia:?}"
+    );
+    assert!(
+        !oleksandr.iter().any(|(_, v)| v == "40" || v == "блакитні"),
+        "Олександру не приписані факти Марії: {oleksandr:?}"
+    );
+    assert!(
+        !mariia.iter().any(|(_, v)| v == "25" || v == "зелені"),
+        "Марії не приписані факти Олександра: {mariia:?}"
+    );
+}
+
+// (б) одне речення з ДВОМА явними суб'єктами — факти чесно пропускаються,
+// нікому не приписуються (25 не потрапляє Марії, 40 — Олександру).
+#[test]
+fn fqa15_compound_sentence_two_subjects_skipped() {
+    let (root, store) = tests_common::tmp_project("fqa15-compound");
+    std::fs::create_dir_all(root.join("manuscript")).unwrap();
+    add_manual_card(
+        &root.to_string_lossy(),
+        &ManualCard {
+            name: "Олександр".into(),
+            aliases: vec![],
+            kind: "персонаж".into(),
+            notes: "Йому 25 років. Його очі зелені.".into(),
+        },
+    )
+    .unwrap();
+    add_manual_card(
+        &root.to_string_lossy(),
+        &ManualCard {
+            name: "Марія".into(),
+            aliases: vec![],
+            kind: "персонаж".into(),
+            notes: "Їй 40 років. Її очі блакитні.".into(),
+        },
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("manuscript/01.md"),
+        "---\ntitle: Г1\n---\n\nОлександр має 25 років, а Марія має 40 років.\n",
+    )
+    .unwrap();
+
+    pipeline(&store);
+    facts::rebuild(&store).unwrap();
+
+    let n: i64 = store
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM extracted_facts WHERE doc_path LIKE 'manuscript%'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        n, 0,
+        "речення з 2 явними суб'єктами: факти не атрибуціюються нікому"
+    );
+    let cross: i64 = store
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM extracted_facts
+             WHERE (entity='Марія' AND value='25') OR (entity='Олександр' AND value='40')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(cross, 0, "крос-атрибуція заборонена");
+    // досьє-факти лишаються (канон), але алертів немає — глава не суперечить
+    let dossier_facts: i64 = store
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM extracted_facts WHERE doc_path LIKE 'bible/%'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(dossier_facts >= 4, "факти обох досьє на місці: {dossier_facts}");
+    assert_eq!(fact_alerts(&store, "fact-vs-dossier").len(), 0);
+    assert_eq!(fact_alerts(&store, "fact-conflict").len(), 0);
 }

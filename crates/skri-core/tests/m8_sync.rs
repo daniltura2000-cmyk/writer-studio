@@ -175,8 +175,9 @@ fn concurrent_conflicting_line_gets_markers_alert_and_row() {
     assert_eq!(rows[0].remote_device, dev_b);
     assert!(rows[0].local_text.contains("пристрою A"));
     assert!(rows[0].remote_text.contains("пристрою B"));
-    // 3-й рядок тіла: перший рядок тіла — порожній (перенос закриваючого "---")
-    assert_eq!(rows[0].local_line, Some(3), "конфлікт на рядку «Рядок другий»");
+    // 2-й рядок тіла: FQA-11 — тіло нормалізоване (без переносу закриваючого
+    // "---"), тож нумерація збігається з рядками редактора
+    assert_eq!(rows[0].local_line, Some(2), "конфлікт на рядку «Рядок другий»");
 
     // алерт kind='sync-conflict' (нерозв'язаний)
     let alerts: Vec<(String, String)> = {

@@ -24,10 +24,22 @@ pub fn parse(text: &str) -> Parsed {
                     meta.insert(k, v);
                 }
             }
+            // FQA-11 (нативний QA): тіло НЕ включає перенос(и) між закриваючим
+            // `---` і текстом — інакше після «зберіг → перечитав» редактор
+            // росте на зайвий `\n` (лічильник 88→89) і offset-и ядра не
+            // збігаються з редактором. body_start зсувається за зрізані
+            // переноси, тож splice_body = чиста prefix-заміна (ідемпотентно).
+            let raw_body = &rest[end_rel.1..];
+            let stripped = raw_body
+                .len()
+                - raw_body
+                    .trim_start_matches(['\n', '\r'])
+                    .len();
+            let body_start = header_start + end_rel.1 + stripped;
             return Parsed {
                 meta,
-                body: rest[end_rel.1..].to_string(),
-                body_start: header_start + end_rel.1,
+                body: raw_body[stripped..].to_string(),
+                body_start,
             };
         }
     }
@@ -87,18 +99,28 @@ pub fn splice_body(raw: &str, body: &str) -> String {
         // frontmatter немає — захищати з'єднання нічого
         return body.to_string();
     }
-    // body_start вказує на перенос після закриваючого `---` (або на кінець
-    // файла, якщо переносу не було) — head закінчується самим `---`.
+    // FQA-11: body_start тепер вказує на ПЕРШИЙ символ тіла (parse зрізає
+    // переноси після закриваючого `---`), тож сплайсинг = prefix-заміна:
+    // файл до тіла не змінюється взагалі, і save→read цикл стабільний
+    // незалежно від того, чи редагатор починався з переносів.
+    // FQA-11: тіло нормалізуємо так само, як parse — без початкових переносів
+    // (\u{000D} = CR; літерал '\r' тут не використовується свідомо)
+    let body = body.trim_start_matches(['\n', '\u{000D}']);
     let head = &raw[..parsed.body_start];
-    let mut out = String::with_capacity(head.len() + body.len() + 1);
-    out.push_str(head);
-    // Якщо тіло не починається з нового рядка — додаемо один: перенос
-    // закриваючого `---` зобов'язаний бути перед першим символом тіла.
-    if !(body.starts_with('\n') || body.starts_with("\r\n")) {
+    if head.ends_with('\n') || head.ends_with('\r') {
+        let mut out = String::with_capacity(head.len() + body.len());
+        out.push_str(head);
+        out.push_str(body);
+        out
+    } else {
+        // head закінчується самим `---` (файл обірваний без переносу) —
+        // QA-01: без переносу тіло зливається з роздільником (`---# Заголовок`)
+        let mut out = String::with_capacity(head.len() + body.len() + 1);
+        out.push_str(head);
         out.push('\n');
+        out.push_str(body);
+        out
     }
-    out.push_str(body);
-    out
 }
 
 /// Захисний інваріант QA-01: після сплайсинга frontmatter має парситися
@@ -153,10 +175,16 @@ mod tests {
     }
 
     #[test]
-    fn splice_body_keeps_leading_newline_body() {
-        let raw = "---\ntitle: T\n---\n";
-        let out = splice_body(raw, "\n\nТіло.");
-        assert_eq!(out, "---\ntitle: T\n---\n\nТіло.");
+    fn splice_read_cycle_is_byte_stable() {
+        // FQA-11 (нативний QA): save→read→save не змінює ані файл, ані тіло —
+        // незалежно від того, чи редагатор починався з переносів
+        for editor_body in ["\n\nТіло.", "# Тіло.", "Тіло."] {
+            let out = splice_body("---\ntitle: T\n---\n", editor_body);
+            let reread = parse(&out);
+            assert_eq!(reread.body, editor_body.trim_start_matches(['\n', '\r']));
+            let out2 = splice_body(&out, editor_body);
+            assert_eq!(out2, out, "повторний сплайсинг того самого тіла не змінює файл");
+        }
     }
 
     #[test]
