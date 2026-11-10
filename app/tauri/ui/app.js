@@ -135,6 +135,11 @@ const I18N = {
     fqa09_save_first: "Зберегти незбережені зміни перед відкриттям іншого проєкту?",
     fqa09_save_failed: "Не вдалося зберегти — проєкт НЕ змінено.",
     fqa09_discard_confirm: "Скинути незбережені зміни?",
+    fqa04_save_first: "Зберегти зміни перед перевіркою?",
+    fqa04_stale_draft: "Перевірено збережену версію — твої правки ще не збережені",
+    fqa06_date_prompt: "Дата публікації для «Заплановано» (РРРР-ММ-ДД):",
+    fqa11_loc: "Сторінка: глава {n}",
+    fqa13_preset_kept: "Напрям застосовується до НОВОГО проєкту. Поточний проєкт залишається без змін (пресет: {x})",
     // моделі (QA-08: чесний каталог)
     models_t: "Налаштування моделей",
     models_sub: "Для різних справ програма використовує різні «мозки». Вибери справу — покажемо, хто її виконує. Перша модель завжди рекомендована і працює на твоєму комп'ютері.",
@@ -324,6 +329,11 @@ const I18N = {
     fqa09_save_first: "Save unsaved changes before opening another project?",
     fqa09_save_failed: "Could not save — project NOT switched.",
     fqa09_discard_confirm: "Discard unsaved changes?",
+    fqa04_save_first: "Save changes before checking?",
+    fqa04_stale_draft: "The saved version was checked — your edits are not saved yet",
+    fqa06_date_prompt: "Publication date for “Scheduled” (YYYY-MM-DD):",
+    fqa11_loc: "Page: chapter {n}",
+    fqa13_preset_kept: "The direction applies to a NEW project. The current project stays unchanged (preset: {x})",
     models_t: "Model settings",
     models_sub: "For different jobs the app uses different “brains”. Pick a job and we'll show who does it. The first model is always recommended and runs on your computer.",
     pick_task: "Pick a job",
@@ -508,6 +518,11 @@ const I18N = {
     fqa09_save_first: "Сохранить несохранённые изменения перед открытием другого проекта?",
     fqa09_save_failed: "Не удалось сохранить — проект НЕ переключён.",
     fqa09_discard_confirm: "Сбросить несохранённые изменения?",
+    fqa04_save_first: "Сохранить изменения перед проверкой?",
+    fqa04_stale_draft: "Проверена сохранённая версия — ваши правки ещё не сохранены",
+    fqa06_date_prompt: "Дата публикации для «Запланировано» (ГГГГ-ММ-ДД):",
+    fqa11_loc: "Страница: глава {n}",
+    fqa13_preset_kept: "Направление применяется к НОВОМУ проекту. Текущий проект остаётся без изменений (пресет: {x})",
     models_t: "Настройки моделей",
     models_sub: "Для разных дел программа использует разные «мозги». Выберите дело — покажем, кто его выполняет. Первая модель всегда рекомендована и работает на вашем компьютере.",
     pick_task: "Выберите дело",
@@ -610,10 +625,25 @@ function applyI18n() {
   $("themeBtn").title = t("theme_btn");
   $("themeBtn").textContent = document.documentElement.dataset.theme === "light" ? "🌙" : "☀️";
   // динамічні частини, якщо вже завантажені
-  if (lastAlerts) renderAlerts();
+  if (lastProjOk !== null) setProjState(lastProjOk, lastProjPreset); // FQA-05: статус у шапці
+  if (lastAlerts) loadAlerts(); // FQA-05: meta-тексти і підсумок залежать від мови
   if (lastBoard) renderRelease(lastBoard);
   if (lastCards) renderBible(lastCards);
-  if (currentTask) selectTask(currentTask, true);
+  if (catalog.length) {
+    // FQA-05: каталог моделей перемальовується людськими назвами; поточний
+    // вибір задачі відновлюємо за id (після перебудови кнопок об'єкт новий)
+    loadCatalog().then(() => {
+      if (currentTask) {
+        const cur = catalog.find((x) => x.id === currentTask.id);
+        if (cur) selectTask(cur, true);
+      }
+    });
+  }
+  if (currentTask && !catalog.length) selectTask(currentTask, true);
+  // FQA-05: результати інструментів перемальовуємо зі збережених даних
+  if (lastVars) renderVars(lastVars);
+  if (lastBarks) renderBarks(lastBarks);
+  if (lastEpisode) renderEpisode(lastEpisode.rel, lastEpisode.r);
   if (root) loadDocs();
   updateCounts();
   renderWizardCards();
@@ -732,7 +762,14 @@ $("wizFinish").onclick = () => {
   $("wizard").classList.add("hidden");
   localStorage.setItem("skri.onboarded", "1");
   // після майстра: проєкт уже відкритий → працюємо; ні → екран вибору папки
-  if (root) openProject(root).then((ok) => { if (!ok) showSetup(false); });
+  if (root) {
+    // FQA-13: напрям, обраний у майстрі, стосується ЛИШЕ нового проєкту.
+    // Відкритий проєкт не перенастроюємо — чесно попереджаємо.
+    if (wizPreset && lastProjOk && lastProjPreset && wizPreset !== lastProjPreset) {
+      alert(t("fqa13_preset_kept", { x: lastProjPreset }));
+    }
+    openProject(root).then((ok) => { if (!ok) showSetup(false); });
+  }
   else { if (wizPreset) selectSetupPreset(wizPreset); showSetup(false); }
 };
 $("startWizard").onclick = showWizard;
@@ -740,9 +777,17 @@ $("startWizard").onclick = showWizard;
 /* ============================================================
    ПРОЄКТ (шапка + оверлей вибору)
    ============================================================ */
-function setProjState(ok, text) {
+// FQA-05: останній стан шапки зберігаємо, щоб перемикання мови могло
+// перезмалювати «Проєкт відкрито» з t() без повторного project_info.
+let lastProjOk = null;
+let lastProjPreset = "";
+function setProjState(ok, preset) {
+  lastProjOk = ok;
+  lastProjPreset = preset || "";
   const el = $("projState");
-  el.textContent = text;
+  el.textContent = ok
+    ? `${t("proj_ok")}${lastProjPreset ? " — " + lastProjPreset : ""}`
+    : t("proj_bad");
   el.className = "proj-state " + (ok ? "ok" : "bad");
 }
 
@@ -772,7 +817,11 @@ function resetProjectState() {
   $("alertList").innerHTML = "";
   $("alertsSummary").textContent = "";
   $("alertFilter").innerHTML = `<option value="">${esc(t("filter_all"))}</option>`;
-  $("alertBadge").hidden = true;
+  // FQA-10: бейдж ховається ГАРАНТОВАНО — і атрибут hidden, і нульовий текст
+  // (CSS .badge-n більше не перебиває display [hidden])
+  const ab = $("alertBadge");
+  ab.hidden = true;
+  ab.textContent = "0";
   // канбан
   lastBoard = null;
   delete $("kanban").dataset.loaded;
@@ -806,11 +855,11 @@ async function openProject(path, quiet = false) {
   $("setupRoot").value = root;
   const r = await cmdq("project_info");
   if (r.err != null) {
-    setProjState(false, t("proj_bad"));
+    setProjState(false, "");
     return false;
   }
   const s = r.ok;
-  setProjState(true, `${t("proj_ok")}${s?.preset ? " — " + s.preset : ""}`);
+  setProjState(true, s?.preset ?? "");
   $("setup").classList.add("hidden");
   await loadDocs();
   return true;
@@ -916,20 +965,27 @@ $("btnNewDoc").onclick = async () => {
   await openDoc(rel);
 };
 
+// шапка метаданих редактора (pub_status тощо) — спільна для openDoc і
+// FQA-08 (оновлення після release_set_status)
+function renderDocMeta(d) {
+  $("docMeta").textContent = d.has_frontmatter
+    ? t("ed_meta_fm") + " " + d.meta.map(([k, v]) => `${k}=${v}`).join(", ")
+    : t("ed_meta_nofm");
+}
+
 async function openDoc(path) {
-  if (dirty && !confirm(t("confirm_unsaved"))) return;
+  if (dirty && !confirm(t("confirm_unsaved"))) return null; // FQA-11: скасовано — нічого не завантажено
   const d = await cmd("read_doc", { rel: path });
   currentDoc = d;
   dirty = false;
   $("editor").value = d.body;
   $("docTitle").textContent = d.title;
-  $("docMeta").textContent = d.has_frontmatter
-    ? t("ed_meta_fm") + " " + d.meta.map(([k, v]) => `${k}=${v}`).join(", ")
-    : t("ed_meta_nofm");
+  renderDocMeta(d);
   $("saveState").textContent = "";
   $("editorEmpty").classList.add("hidden");
   updateCounts();
   document.querySelectorAll(".doc").forEach((b) => b.classList.toggle("sel", b.dataset.path === path));
+  return d; // FQA-11: викликати може перевірити, що редактор справді завантажено
 }
 
 const editor = $("editor");
@@ -1197,28 +1253,55 @@ function flashLineNumber(lineNo) {
   setTimeout(() => hl.remove(), 2000);
 }
 
-async function gotoAlert(doc, charStart) {
+// FQA-11: якщо перейти не вдалося (цитата не знайдена, offset некоректний
+// або редагатор не завантажився) — чесний fallback: під цитатою в картці
+// алерту з'являється рядок «Сторінка: глава N», БЕЗ жовтої смуги.
+function gotoAlertFallback(btn, doc) {
+  if (!btn) return;
+  const agoto = btn.closest(".agoto");
+  if (!agoto || agoto.querySelector(".loc-fallback")) return;
+  const base = String(doc || "").split(/[\\/]/).pop() || "";
+  const m = base.match(/(\d+)/);
+  const n = m ? String(parseInt(m[1], 10)) : base.replace(/\.md$/, "");
+  if (!n) return;
+  const span = document.createElement("span");
+  span.className = "where loc-fallback";
+  span.textContent = t("fqa11_loc", { n });
+  agoto.appendChild(span);
+}
+
+async function gotoAlert(doc, charStart, btn) {
   if (!doc) return;
   try {
     const a = gotoAlert.alert; // цитата для надійного пошуку рядка
-    await openDoc(doc);
-    // QA-05: offset може не збігатися (заголовки/основа відліку) — тому
-    // основний шлях: знайти ЦИТАТУ алерту в тілі і підсвітити її рядок.
+    const loaded = await openDoc(doc);
+    // FQA-11: редагатор має бути ПОВНІСТЮ завантажений ДО пошуку цитати —
+    // openDoc міг бути скасований confirm-ом (тоді editor містить ІНШУ главу)
+    const body = loaded && typeof loaded.body === "string" ? loaded.body : "";
+    const ready = !!loaded && editor.value === body && body.trim().length > 0;
     let line = -1;
-    const q = a ? String(a.payload?.sentence || a.payload?.marker || a.payload?.word || a.payload?.canonical || "").trim() : "";
-    if (q.length >= 4) {
+    const q = ready && a
+      ? String(a.payload?.sentence || a.payload?.marker || a.payload?.word || a.payload?.canonical || "").trim()
+      : "";
+    if (ready && q.length >= 4) {
       const idx = editor.value.indexOf(q);
       if (idx >= 0) {
         const lineStart = editor.value.lastIndexOf("\n", Math.max(idx - 1, 0)) + 1;
         line = (editor.value.slice(0, lineStart).match(/\n/g) || []).length;
       }
     }
-    if (line < 0 && charStart != null) {
-      const ci = Math.min(byteIndexToCharIndex(editor.value, charStart), Math.max(editor.value.length - 1, 0));
-      const lineStart = editor.value.lastIndexOf("\n", Math.max(ci - 1, 0)) + 1;
-      line = (editor.value.slice(0, lineStart).match(/\n/g) || []).length;
+    if (ready && line < 0 && charStart != null) {
+      // FQA-11: offset — байтовий; довіряємо ЛИШЕ коректному діапазону
+      // (нульовий/від'ємний = підозріло малий, більший за тіло = некоректний)
+      const byteLen = new TextEncoder().encode(body).length;
+      if (charStart > 0 && charStart <= byteLen) {
+        const ci = Math.min(byteIndexToCharIndex(editor.value, charStart), Math.max(editor.value.length - 1, 0));
+        const lineStart = editor.value.lastIndexOf("\n", Math.max(ci - 1, 0)) + 1;
+        line = (editor.value.slice(0, lineStart).match(/\n/g) || []).length;
+      }
     }
     if (line >= 0) flashLineNumber(line);
+    else gotoAlertFallback(btn, doc); // чесний fallback без жовтої смуги
   } catch { /* помилку вже показано в cmd() */ }
 }
 
@@ -1296,6 +1379,9 @@ function instanceHtml(a) {
 function metaFor(kind) {
   if (kind === "__missing_time")
     return { severity: "tip", title: t("missing_time_title"), explain: t("missing_time_explain"), action: t("missing_time_action") };
+  // FQA-04: чесна порада «перевірено збережену версію» — окрема tip-картка
+  if (kind === "__stale_draft")
+    return { severity: "tip", title: t("fqa04_stale_draft"), explain: "", action: "" };
   const m = alertMeta[kind];
   if (m) return m;
   const f = FALLBACK_META.find((x) => x.kind === kind);
@@ -1308,26 +1394,24 @@ function renderAlerts() {
   if (!lastAlerts) return;
   gotoRegistry = []; // реєстр кнопок «Перейти» перебудовується щоразу
   const f = $("alertFilter").value;
-  const list = f ? lastAlerts.filter((a) => a.kind === f) : lastAlerts;
-  // QA-07: бейдж = фільтр = підсумок рахують ОДНАКОВО — по відфільтрованому
-  // списку, мінус ігноровані картки
-  const visible = list.filter((a) => !isDismissed(a));
+  // FQA-12: ОДИН базовий масив — lastAlerts мінус ігноровані. Бейдж,
+  // опції фільтра і підсумок рахуються з нього (при dismiss — синхронно,
+  // бо все це одна функція renderAlerts).
+  const visible = lastAlerts.filter((a) => !isDismissed(a));
+  const shown = f ? visible.filter((a) => a.kind === f) : visible;
   // групування по kind; спершу problem, потім tip
   const byKind = new Map();
-  for (const a of visible) {
+  for (const a of shown) {
     if (!byKind.has(a.kind)) byKind.set(a.kind, []);
     byKind.get(a.kind).push(a);
   }
-  const kinds = [...byKind.keys()].sort((x, y) => {
-    const sx = metaFor(x).severity === "problem" ? 0 : 1;
-    const sy = metaFor(y).severity === "problem" ? 0 : 1;
-    return sx - sy || byKind.get(y).length - byKind.get(x).length;
-  });
+  const sevRank = (k) => (metaFor(k).severity === "problem" ? 0 : 1);
+  const kinds = [...byKind.keys()].sort((x, y) => sevRank(x) - sevRank(y) || byKind.get(y).length - byKind.get(x).length);
   // підсумок: статична частина (що перевірено) + чесний «знайдено» по фільтру
-  const problems = visible.filter((a) => metaFor(a.kind).severity === "problem").length;
-  const tips = visible.length - problems;
+  const problems = shown.filter((a) => sevRank(a.kind) === 0).length;
+  const tips = shown.length - problems;
   let sum = alertSummaryBase ? alertSummaryBase + " " : "";
-  if (visible.length) {
+  if (shown.length) {
     sum += t("sum_found", { p: problems, pw: plural(problems, I18N[lang].problem_w), tp: tips, tw: plural(tips, I18N[lang].tip_w) });
   }
   $("alertsSummary").textContent = sum;
@@ -1363,19 +1447,28 @@ function renderAlerts() {
       })
       .join("") ||
     `<div class="empty"><span class="ico">✅</span>${esc(t("no_alerts"))}</div>`;
-  // бейдж на вкладці = кількість ВИДИМИХ (з урахуванням фільтра й ігнорованих)
+  // бейдж на вкладці = кількість видимих у поточному фільтрі
   const badge = $("alertBadge");
-  badge.hidden = visible.length === 0;
-  badge.textContent = visible.length;
-  // опції фільтра (лічать УСІ алерти, не лише видимі)
+  badge.hidden = shown.length === 0;
+  badge.textContent = shown.length;
+  // FQA-12: опції фільтра теж з масиву visible (мінус ігноровані!) —
+  // список видів НЕ залежить від активного фільтра, щоб дропдаун не «згортався»
+  const visByKind = new Map();
+  for (const a of visible) {
+    if (!visByKind.has(a.kind)) visByKind.set(a.kind, []);
+    visByKind.get(a.kind).push(a);
+  }
+  const allKinds = [...visByKind.keys()].sort(
+    (x, y) => sevRank(x) - sevRank(y) || visByKind.get(y).length - visByKind.get(x).length
+  );
   $("alertFilter").innerHTML =
-    `<option value="">${esc(t("filter_all"))} (${lastAlerts.length})</option>` +
-    kinds.map((k) => `<option value="${esc(k)}" ${k === f ? "selected" : ""}>${esc(metaFor(k).title)} (${byKind.get(k).length})</option>`).join("");
+    `<option value="">${esc(t("filter_all"))} (${visible.length})</option>` +
+    allKinds.map((k) => `<option value="${esc(k)}" ${k === f ? "selected" : ""}>${esc(metaFor(k).title)} (${visByKind.get(k).length})</option>`).join("");
   // кнопки «Перейти» (глава + offset), «Прийняти варіант», «Ігнорувати»
   $("alertList").querySelectorAll("button[data-goto-doc]").forEach((b) => {
     b.onclick = () => {
       gotoAlert.alert = gotoRegistry[Number(b.dataset.gi)] || null;
-      gotoAlert(b.dataset.gotoDoc, Number(b.dataset.gotoOff));
+      gotoAlert(b.dataset.gotoDoc, Number(b.dataset.gotoOff), b); // FQA-11: btn — для чесного fallback
     };
   });
   $("alertList").querySelectorAll("button[data-accept]").forEach((b) => {
@@ -1428,13 +1521,21 @@ $("btnCheck").onclick = async () => {
   const gen = projGen; // QA-10: якщо проєкт змінили під час перевірки — результат ігноруємо
   $("btnCheck").disabled = true;
   $("btnCheck").textContent = "⏳ " + t("checking");
+  // FQA-04 (чесна перевірка): при незбережених правках пропонуємо зберегти.
+  // OK → saveDoc перед прогоном; Cancel → продовжуємо, але prepend'ом додаємо
+  // чесну пораду-картку (kind='__stale_draft'), що перевірено збережену версію.
+  let staleDraft = false;
+  if (currentDoc && dirty) {
+    if (confirm(t("fqa04_save_first"))) await saveDoc();
+    else staleDraft = true;
+  }
   try {
     await loadMeta();
     const r = await cmd("run_checks");
+    // FQA-01: style-перевірки виконує САМ run_checks (інтервально, до
+    // SELECT-а алертів) — style-алерти приходять у r.alerts; окремий виклик
+    // run_style з фронтової кнопки прибрано (він і давав дублікати карток).
     const alerts = r.alerts || [];
-    // style-перевірки — послідовно після основних валідаторів
-    const sr = await cmdq("run_style");
-    if (sr.err == null && Array.isArray(sr.ok)) alerts.push(...sr.ok);
     // QA-07: чесні підсумки — «глав» = лише manuscript; сутності окремо:
     // досьє автора vs знайдено в тексті. problem/tip рахує renderAlerts
     // ОДНАКОВО з фільтром (бейдж = фільтр = підсумок).
@@ -1453,6 +1554,10 @@ $("btnCheck").onclick = async () => {
         payload: { docs: r.timeline_missing.map(([p, n]) => `${p} — #${n}`) },
       });
     }
+    // FQA-04: чесна порада — найпершою карткою
+    if (staleDraft) {
+      alerts.unshift({ id: "stale", kind: "__stale_draft", payload: {} });
+    }
     if (gen !== projGen) return; // проєкт змінили — stale результат не малюємо
     fillAlerts(alerts, sum);
     await loadBible(); // картки оновилися після конвеєра
@@ -1466,9 +1571,15 @@ $("btnCheck").onclick = async () => {
 
 /* ============================================================
    ІНСТРУМЕНТИ ДІАЛОГІВ (ігри/сценарії)
+   FQA-05: останні результати зберігаємо, щоб зміна мови
+   перемальовувала таблиці з t() без повторного прогону.
    ============================================================ */
-$("btnVars").onclick = async () => {
-  const rows = await cmd("var_audit");
+let lastVars = null;
+let lastBarks = null;
+let lastEpisode = null; // { rel, r }
+
+function renderVars(rows) {
+  lastVars = rows;
   $("varsOut").innerHTML =
     `<div class="tablewrap"><table class="t"><tr><th>${esc(t("th_var"))}</th><th>${esc(t("th_set"))}</th><th>${esc(t("th_check"))}</th><th>${esc(t("th_unset"))}</th><th>${esc(t("th_status"))}</th></tr>` +
     rows
@@ -1480,10 +1591,10 @@ $("btnVars").onclick = async () => {
       )
       .join("") +
     "</table></div>";
-};
+}
 
-$("btnBarks").onclick = async () => {
-  const rows = await cmd("barks");
+function renderBarks(rows) {
+  lastBarks = rows;
   $("barksOut").innerHTML =
     `<div class="tablewrap"><table class="t"><tr><th>${esc(t("th_trigger"))}</th><th>${esc(t("th_priority"))}</th><th>${esc(t("th_cooldown"))}</th><th>${esc(t("th_conditions"))}</th><th>${esc(t("th_variants"))}</th></tr>` +
     rows
@@ -1494,12 +1605,10 @@ $("btnBarks").onclick = async () => {
       )
       .join("") +
     "</table></div>";
-};
+}
 
-$("btnEpisode").onclick = async () => {
-  const rel = $("epPath").value.trim();
-  if (!rel) { alert(t("need_ep")); return; }
-  const r = await cmd("episode_validate", { rel });
+function renderEpisode(rel, r) {
+  lastEpisode = { rel, r };
   const c = r.check;
   $("epOut").innerHTML =
     `<div class="card"><b>${esc(t("btn_episode"))}: ${esc(rel)}</b>
@@ -1517,6 +1626,16 @@ $("btnEpisode").onclick = async () => {
       )
       .join("") +
     "</table></div>";
+}
+
+$("btnVars").onclick = async () => renderVars(await cmd("var_audit"));
+
+$("btnBarks").onclick = async () => renderBarks(await cmd("barks"));
+
+$("btnEpisode").onclick = async () => {
+  const rel = $("epPath").value.trim();
+  if (!rel) { alert(t("need_ep")); return; }
+  renderEpisode(rel, await cmd("episode_validate", { rel }));
 };
 
 /* ============================================================
@@ -1544,8 +1663,6 @@ function renderRelease(b) {
   $("kanban").innerHTML = anyChapters
     ? b.columns
         .map((col) => {
-          const idx = STATUSES.indexOf(col.status);
-          const next = idx >= 0 && idx < STATUSES.length - 1 ? STATUSES[idx + 1] : null;
           return `<div class="kcol">
         <div class="khead">${esc(t("st_" + col.status))} <span class="kn">${col.chapters.length}</span></div>
         ${col.chapters
@@ -1553,7 +1670,11 @@ function renderRelease(b) {
             (c) => `<div class="kcard">
           <span class="t" title="${esc(c.doc_path)}">${esc(c.title)}</span>
           <span class="m">${c.word_count} ${plural(c.word_count, I18N[lang].words)}${c.pub_date ? " · " + esc(new Date(c.pub_date * 1000).toISOString().slice(0, 10)) : ""}</span>
-          ${next ? `<button class="compact" data-doc="${esc(c.doc_path)}" data-next="${next}">${esc(t("move_to", { s: t("st_" + next) }))}</button>` : `<span class="done">${esc(t("done_pub"))}</span>`}
+          ${/* FQA-07: select УСІХ 5 статусів — перехід на будь-який,
+                включно з поверненням published → draft */
+            `<label class="kstatus-line"><select class="kstatus" data-doc="${esc(c.doc_path)}" data-status="${esc(c.status)}" aria-label="${esc(t("move_to", { s: t("st_" + c.status) }))}">${STATUSES.map(
+              (s) => `<option value="${s}"${s === c.status ? " selected" : ""}>${esc(t("st_" + s))}</option>`
+            ).join("")}</select></label>`}
         </div>`
           )
           .join("")}
@@ -1562,10 +1683,30 @@ function renderRelease(b) {
         .join("")
     : `<div class="empty"><span class="ico">🗓️</span>${esc(t("no_release"))}</div>`;
 
-  $("kanban").querySelectorAll("button[data-doc]").forEach((btn) => {
-    btn.onclick = async () => {
-      await cmd("release_set_status", { rel: btn.dataset.doc, status: btn.dataset.next });
-      await loadRelease();
+  $("kanban").querySelectorAll("select.kstatus").forEach((sel) => {
+    sel.onchange = async () => {
+      const rel = sel.dataset.doc;
+      const status = sel.value;
+      let pubDate; // FQA-06: перехід у «Заплановано» питає дату (за замовчуванням сьогодні+7)
+      if (status === "scheduled") {
+        const def = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+        const d = prompt(t("fqa06_date_prompt"), def);
+        if (d === null) { sel.value = sel.dataset.status; return; } // скасовано — статус не змінюємо
+        pubDate = d.trim() || undefined;
+      }
+      try {
+        await cmd("release_set_status", { rel, status, pub_date: pubDate });
+        // FQA-08: якщо ця глава відкрита в редакторі — оновлюємо docMeta
+        // (pub_status у шапці редактора мусить показати новий статус)
+        if (currentDoc && sameRoot(currentDoc.path, rel)) {
+          try {
+            const d = await cmd("read_doc", { rel });
+            currentDoc = d;
+            renderDocMeta(d);
+          } catch { /* помилку вже показано в cmd() */ }
+        }
+        await loadRelease();
+      } catch { /* помилку вже показано в cmd(); канбан перечитається */ }
     };
   });
 }
